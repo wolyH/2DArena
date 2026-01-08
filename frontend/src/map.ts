@@ -6,21 +6,21 @@ export interface Point2D {
 // Uses the pointy top orientation
 export class Layout {
     origin: Point2D;
-    readonly size: Point2D;
+    size: Point2D;
 
     //Forward matrix: Hex to Pixel
-    readonly f0 = Math.sqrt(3.0); 
-    readonly f1 = Math.sqrt(3.0) / 2.0; 
-    readonly f2 = 0.0; 
-    readonly f3 = 3.0 / 2.0;
+    private readonly f0 = Math.sqrt(3.0); 
+    private readonly f1 = Math.sqrt(3.0) / 2.0; 
+    private readonly f2 = 0.0; 
+    private readonly f3 = 3.0 / 2.0;
     //Backward matrix: Pixel to Hex
-    readonly b0 = Math.sqrt(3.0) / 3.0; 
-    readonly b1 = -1.0 / 3.0; 
-    readonly b2 = 0.0; 
-    readonly b3 = 2.0 / 3.0;
+    private readonly b0 = Math.sqrt(3.0) / 3.0; 
+    private readonly b1 = -1.0 / 3.0; 
+    private readonly b2 = 0.0; 
+    private readonly b3 = 2.0 / 3.0;
 
     //In multiples of 60°
-    readonly startAngle = 0.5;
+    private readonly startAngle = 0.5;
 
     constructor(origin: Point2D, size: Point2D) {
         this.origin = origin;
@@ -54,7 +54,10 @@ export class Layout {
     }
 
     pixelToHex(p: Point2D): Hex {
-        const point = {x: (p.x - this.origin.x) / this.size.x, y: (p.y - this.origin.y) / this.size.y};
+        const point = {
+            x: (p.x - this.origin.x) / this.size.x, 
+            y: (p.y - this.origin.y) / this.size.y
+        };
         const q = (this.b0 * point.x + this.b1 * point.y);
         const r = (this.b2 * point.x + this.b3 * point.y);
 
@@ -92,10 +95,10 @@ export class Hex {
     fillColor: string;
     strokeColor: string;
 
-    static readonly DEFAULT_FILL_COLOR = "#1a1b1bff";
+    static readonly DEFAULT_FILL_COLOR = "#2b2d2dff";
     static readonly DEFAULT_STROKE_COLOR = "#0a0a0aff";
-    static readonly DEFAULT_DEPTH_FILL_COLOR = "#151414ff";
-    static readonly DEFAULT_LINE_WIDTH = 3;
+    static readonly DEFAULT_DEPTH_FILL_COLOR = "#161717ff";
+    static readonly DEFAULT_LINE_WIDTH = 2;
 
     /**
      * Creates a new Hexagon using Cube coordinates.
@@ -133,77 +136,366 @@ export class Hex {
     static hashCode(q: number, r: number) : string {
          return `${q}_${r}`;
     }
-
 }
 
 export class Renderer {
-    readonly ctx : CanvasRenderingContext2D;
+    readonly canvas: HTMLCanvasElement
     readonly layout: Layout;
-    readonly hexDepth: number
-    readonly DEFAULT_HEX_DEPTH = 30
+    private canvasWidth: number;
+    private canvasHeight: number;
 
-    constructor(ctx: CanvasRenderingContext2D, layout: Layout, hexDepth: number = this.DEFAULT_HEX_DEPTH) {
-        this.ctx = ctx;
+    static readonly DEFAULT_HEX_DEPTH = 30
+    static readonly DEFAULT_BACKGROUND_FILL_COLOR: string  = "#282118ff";
+    
+    readonly background : string | HTMLImageElement;
+
+    constructor(
+        canvas: HTMLCanvasElement,
+        layout: Layout, 
+        canvasWidth: number, 
+        canvasHeight: number,
+        background?: HTMLImageElement
+    ) {
+        this.canvas = canvas;
         this.layout = layout;
-        this.hexDepth = hexDepth;
+        this.canvasWidth  = canvasWidth;
+        this.canvasHeight = canvasHeight;
+        if(background) {
+            this.background = background
+        }
+        else {
+            this.background = Renderer.DEFAULT_BACKGROUND_FILL_COLOR;
+        }
     }
 
-    drawMap(map: Map<string, Hex>, canvasWidth: number, canvasHeight: number): void {
+    clear(): void {
+        const ctx = this.canvas.getContext('2d')!
+        ctx.clearRect(0, 0, this.canvasWidth, this.canvasHeight);
+        if(typeof this.background === "string") {
+            ctx.fillStyle = (Renderer.DEFAULT_BACKGROUND_FILL_COLOR);
+            ctx.fillRect(0, 0, this.canvasWidth, this.canvasHeight)
+        } else {
+            ctx.drawImage(this.background, 0, 0, this.canvasWidth, this.canvasHeight);
+        }
+    }
 
-        this.ctx.clearRect(0, 0, canvasWidth, canvasHeight);
-        this.ctx.fillStyle = ("#242220ff");
-        this.ctx.fillRect(0, 0, canvasWidth, canvasHeight)
+    setCanvasDims(canvasWidth: number, canvasHeight: number): void {
+        this.canvasWidth  = canvasWidth;
+        this.canvasHeight = canvasHeight;
+    }
 
+    drawMap(
+        map: Map<string, Hex>, 
+    ): void {
+        const ctx = this.canvas.getContext('2d')!
         const depthStrokePath = new Path2D();
         
         for (let [_, h] of map) {
             const corners = this.layout.findCorners(h);
 
             depthStrokePath.moveTo(corners[1].x,corners[1].y);
-            depthStrokePath.lineTo(corners[1].x,corners[1].y + this.hexDepth);
-            depthStrokePath.lineTo(corners[2].x,corners[2].y + this.hexDepth);
-            depthStrokePath.lineTo(corners[3].x,corners[3].y + this.hexDepth);
+            depthStrokePath.lineTo(corners[1].x,corners[1].y + Renderer.DEFAULT_HEX_DEPTH);
+            depthStrokePath.lineTo(corners[2].x,corners[2].y + Renderer.DEFAULT_HEX_DEPTH);
+            depthStrokePath.lineTo(corners[3].x,corners[3].y + Renderer.DEFAULT_HEX_DEPTH);
             depthStrokePath.lineTo(corners[3].x,corners[3].y);
             
-            this.ctx.beginPath();
-            this.ctx.moveTo(corners[1].x,corners[1].y);
-            this.ctx.lineTo(corners[1].x,corners[1].y + this.hexDepth);
-            this.ctx.lineTo(corners[2].x,corners[2].y + this.hexDepth);
-            this.ctx.lineTo(corners[3].x,corners[3].y + this.hexDepth);
-            this.ctx.lineTo(corners[3].x,corners[3].y);
-            this.ctx.lineTo(corners[2].x,corners[2].y);
-            this.ctx.lineTo(corners[1].x,corners[1].y);
-            this.ctx.fillStyle = Hex.DEFAULT_DEPTH_FILL_COLOR;
-            this.ctx.fill()
+            ctx.beginPath();
+            ctx.moveTo(corners[1].x,corners[1].y);
+            ctx.lineTo(corners[1].x,corners[1].y + Renderer.DEFAULT_HEX_DEPTH);
+            ctx.lineTo(corners[2].x,corners[2].y + Renderer.DEFAULT_HEX_DEPTH);
+            ctx.lineTo(corners[3].x,corners[3].y + Renderer.DEFAULT_HEX_DEPTH);
+            ctx.lineTo(corners[3].x,corners[3].y);
+            ctx.lineTo(corners[2].x,corners[2].y);
+            ctx.lineTo(corners[1].x,corners[1].y);
+            ctx.fillStyle = Hex.DEFAULT_DEPTH_FILL_COLOR;
+            ctx.fill()
         }
         
-        this.ctx.lineWidth = Hex.DEFAULT_LINE_WIDTH;
-        this.ctx.strokeStyle = Hex.DEFAULT_DEPTH_FILL_COLOR;
-        this.ctx.stroke(depthStrokePath);
+        ctx.lineWidth = Hex.DEFAULT_LINE_WIDTH;
+        ctx.strokeStyle = Hex.DEFAULT_DEPTH_FILL_COLOR;
+        ctx.stroke(depthStrokePath);
         
         const gridPath = new Path2D();
-
+        
         for (let [_, h] of map) {
             const corners = this.layout.findCorners(h);
-            
-            this.ctx.beginPath();
-            this.ctx.moveTo(corners[0].x, corners[0].y);
-            for (let i = 1; i < 6; i++) {
-                this.ctx.lineTo(corners[i].x, corners[i].y);
-            }
-            this.ctx.closePath();
-            this.ctx.fillStyle = h.fillColor;
-            this.ctx.fill();
 
+            ctx.beginPath();
+            ctx.moveTo(corners[0].x, corners[0].y);
+            for (let i = 1; i < 6; i++) {
+                ctx.lineTo(corners[i].x, corners[i].y);
+            }
+            ctx.closePath();
+
+            ctx.fillStyle = h.fillColor;
+            ctx.fill();
+            
             gridPath.moveTo(corners[0].x, corners[0].y);
+            
             for (let i = 1; i < 6; i++) {
                 gridPath.lineTo(corners[i].x, corners[i].y);
             }
             gridPath.closePath();
+        }
+        ctx.lineWidth = Hex.DEFAULT_LINE_WIDTH;
+        ctx.strokeStyle = Hex.DEFAULT_STROKE_COLOR;
+        ctx.stroke(gridPath);
     }
 
-    this.ctx.lineWidth = Hex.DEFAULT_LINE_WIDTH;
-    this.ctx.strokeStyle = Hex.DEFAULT_STROKE_COLOR;
-    this.ctx.stroke(gridPath);
+    drawPlayer(player:Player): void {
+        const sprite = player.getCurrentSprite();
+        const position = this.layout.hexToPixel(new Hex(...player.getPosition()));
+
+        const ctx = this.canvas.getContext('2d')!;
+        const w = sprite.naturalWidth;
+        const h = sprite.naturalHeight;
+
+        ctx.save();
+        ctx.translate(position.x, 0);
+        const left = -1;
+        ctx.scale(left, 1); 
+        ctx.drawImage(
+            sprite, 
+            -w / 2, 
+            position.y - h + 10,
+        );
+        ctx.restore()
     }
 }
+
+export class AssetManager {
+    private sprites: Map<string, Array<HTMLImageElement>>;
+
+    constructor() {
+        this.sprites = new Map<string, Array<HTMLImageElement>>();
+    }
+
+    async loadSprites(urls: Map<string, Array<string>>) {
+        const promises: Array<Promise<void>> = [];
+
+        urls.forEach((spriteUrls, spriteName) => {
+            if (!this.sprites.has(spriteName)) {
+                this.sprites.set(spriteName, []);
+            }
+            const arr = this.sprites.get(spriteName)!
+            for (let url of spriteUrls) {
+                const img = new Image();
+                promises.push(new Promise<void>((resolve, reject) => {
+                    img.onload = () => resolve();
+                    img.onerror = () => reject(new Error(`Failed to load ${url}`));
+                }))
+                arr.push(img)
+                img.src = url;
+            }
+        })
+
+        await Promise.all(promises);
+    }
+
+    get(spriteName: string): HTMLImageElement[] | undefined {
+        return this.sprites.get(spriteName);
+    }
+}
+
+export type PlayerAction = "Idle" | "Moving" | "Striking";
+
+export class Player {
+
+    // position of the player
+    private q: number;
+    private r: number;
+    private s: number;
+
+    private action: PlayerAction;
+    private spriteIdx: number;
+    private sprites: Record<PlayerAction, Array<HTMLImageElement>>;
+    private frameCounter;
+    private readonly ANIMATION_SPEED = 40;
+
+    constructor(
+        q:number, 
+        r: number, 
+        s: number, 
+        sprites: Record<PlayerAction, Array<HTMLImageElement>>
+    ) {
+        if (Math.round(q + r + s) !== 0) {
+            throw Error("q + r + s must be 0");
+        }
+
+        this.q = q;
+        this.r = r;
+        this.s = s;
+        this.action  = "Idle";
+        this.spriteIdx = 0;
+        this.sprites = sprites;
+        this.frameCounter = 0;
+    }
+
+    getPosition(): [number, number, number] {
+        return [this.q, this.r, this.s];
+    }
+
+    updateCurrentSprite(): void {
+        this.frameCounter++
+
+        if (this.frameCounter >= this.ANIMATION_SPEED) {
+            this.frameCounter = 0;
+
+            const nextIdx = this.spriteIdx + 1;
+            const spriteSheet = this.sprites[this.action];
+
+            if(!spriteSheet) {
+                throw new Error(`Sprite sheet is null for PlayerAction: ${this.action}`);
+            }
+            else if (nextIdx >= spriteSheet.length) {
+                if (this.action === "Striking") {
+                    this.idle();
+                }
+                else {
+                    this.spriteIdx = 0;
+                }
+            }
+            else {
+                this.spriteIdx = nextIdx;
+            }
+        }
+    }
+
+    getCurrentSprite(): HTMLImageElement {
+        const spriteSheet = this.sprites[this.action];
+
+        if(spriteSheet) {
+            return spriteSheet[this.spriteIdx]
+        }
+        throw new Error(`Sprite sheet is null for PlayerAction: ${this.action}`);
+    }
+
+    move(q: number, r: number, s: number): void {
+        this.changeAction("Moving");
+
+        // No need to re check q + r + s = 0, the World object handles the logic
+        this.q = q;
+        this.r = r;
+        this.s = s;
+    }
+
+    strike(): void {
+        this.changeAction("Striking");
+    }
+
+    idle(): void {
+        this.changeAction("Idle");
+    }
+
+    private changeAction(action: PlayerAction): void {
+        if (this.action !== action) {
+            this.action = action;
+            const spriteSheet = this.sprites[this.action];
+            if(spriteSheet) {
+                // The animation starts instantly at next frame
+                this.spriteIdx = this.sprites[action].length - 1;
+                this.frameCounter = this.ANIMATION_SPEED
+            }
+            throw new Error(`Sprite sheet is null for PlayerAction: ${this.action}`);
+        }
+    }
+}
+
+export class World {
+    player: Player;
+    map: Map<string, Hex>;
+    renderer: Renderer;
+
+    constructor(player: Player, map: Map<string, Hex>, renderer: Renderer) {
+        this.player = player;
+        this.map = map;
+        this.renderer = renderer;
+    }
+
+    start(): void {
+        let resizeTimeout: number;
+
+        // Temporary fix: only resize after 150ms of no dragging
+        window.addEventListener('resize', () => {
+            clearTimeout(resizeTimeout);
+            resizeTimeout = setTimeout(() => this.resize(), 150); 
+        });
+
+        // Start the Main game loop
+        this.loop();
+    }
+
+    private loop = (): void => {
+        this.update();
+        this.draw();
+        requestAnimationFrame(this.loop);
+    }
+
+    private update(): void {
+        this.player.updateCurrentSprite();
+    }
+
+    private draw(): void {
+        this.renderer.clear();
+        this.renderer.drawMap(this.map);
+        this.renderer.drawPlayer(this.player);
+    }
+
+    private resize(): void {
+        const canvas = this.renderer.canvas;
+        const width = window.innerWidth;
+        const height = window.innerHeight;
+      
+        canvas.width = width;
+        canvas.height = height;
+      
+        if(window.devicePixelRatio !== 1) {
+            canvas.width = width * window.devicePixelRatio;
+            canvas.height = height * window.devicePixelRatio;
+        
+            canvas.style.width = `${width}px`;
+            canvas.style.height = `${height}px`;
+            canvas.getContext(('2d'))!.scale(window.devicePixelRatio, window.devicePixelRatio);
+        }
+    
+        this.renderer.layout.origin = {x: width / 2, y: height / 2};
+        this.renderer.setCanvasDims(width, height);
+    }
+}
+
+/*
+ //Highlights the hex where the cursor currently is
+    let currentHex : Hex | null = null;
+    
+    canvas.addEventListener('mousemove', (event: MouseEvent) => {
+      // Get the canvas position and size
+      const rect = canvas.getBoundingClientRect();
+    
+      const h = layout.pixelToHex({
+        x: event.clientX - rect.left, 
+        y: event.clientY - rect.top
+      });
+    
+      if(map.has(h.hashCode())) {
+    
+        if(!currentHex || h.hashCode() !== currentHex.hashCode()) {
+          h.fillColor = "#01672cff";
+          map.set(h.hashCode(), h)
+        }
+    
+        if (currentHex !== null && h.hashCode() !== currentHex.hashCode()) {
+          currentHex.fillColor = Hex.DEFAULT_FILL_COLOR;
+          map.set(currentHex.hashCode(), currentHex)
+        }
+        currentHex = h;
+    
+      } 
+      else if (currentHex !== null) {
+        currentHex.fillColor = Hex.DEFAULT_FILL_COLOR;
+        map.set(currentHex.hashCode(), currentHex);
+        currentHex = null;
+      }
+    
+    });
+
+    */
