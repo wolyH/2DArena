@@ -1,38 +1,36 @@
 import './style.css'
-import {Layout, Hex, Renderer, AssetManager, Player, World} from './map';
-import type {PlayerAction} from './map'
-
+import { Game } from './game.ts';
+import {Renderer} from './renderer.ts'
+import type {PlayerAction} from './player.ts'
+import {Player} from './player.ts';
+import {Layout} from './layout.ts';
+import {Hex} from './hex.ts';
+import {AssetManager} from './asset.ts';
+import { Grid } from './grid.ts';
 
 const assetManager = new AssetManager();
 const urls = new Map<string, Array<string>>();
 
 urls.set(
   "b_warrior_idle", ["./b_warrior/idle/sprite_1.png","./b_warrior/idle/sprite_2.png","./b_warrior/idle/sprite_3.png","./b_warrior/idle/sprite_4.png","./b_warrior/idle/sprite_5.png","./b_warrior/idle/sprite_6.png","./b_warrior/idle/sprite_7.png"],
-)
+);
 urls.set(
   "b_warrior_moving", ["./b_warrior/moving/sprite_0.png","./b_warrior/moving/sprite_1.png","./b_warrior/moving/sprite_2.png","./b_warrior/moving/sprite_3.png","./b_warrior/moving/sprite_4.png","./b_warrior/moving/sprite_5.png"]
-)
+);
 
 urls.set(
   "b_warrior_striking", ["./b_warrior/striking/sprite_0.png","./b_warrior/striking/sprite_1.png","./b_warrior/striking/sprite_2.png","./b_warrior/striking/sprite_3.png"]
-)
+);
 
 urls.set(
   "spikes", ["./spikes/spike_0.png", "./spikes/spike_1.png", "./spikes/spike_2.png", "./spikes/spike_3.png", "./spikes/spike_4.png"]
-)
+);
 
 await assetManager.loadSprites(urls);
 
-document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
-  <style>
-    html, body {
-      overflow: hidden;
-    }
-  </style>
-  <canvas id="mycanvas"></canvas>
-`;
+document.querySelector<HTMLDivElement>('#app')!.innerHTML = `<canvas></canvas>`;
 
-const canvas = document.getElementById('mycanvas') as HTMLCanvasElement;
+const canvas = document.querySelector('canvas')!;
 const ctx = canvas.getContext('2d')!
 
 let width = window.innerWidth;
@@ -58,7 +56,7 @@ if(window.devicePixelRatio !== 1){
 
 // divide hex horizontal size by 2 to give an isometric look
 const layout = new Layout({x: width / 2, y: height / 2}, {x: 100, y: 50});
-const renderer = new Renderer(canvas, layout, width, height);
+const renderer = new Renderer(canvas, layout);
 
 //Row r size is 2*N+1 - abs(N-r)
 const N = 4;
@@ -85,7 +83,11 @@ const sprites: Record<PlayerAction, Array<HTMLImageElement>> = {
     "Striking": assetManager.get("b_warrior_striking")!
 };
 
-const player = new Player(-3,0,3, sprites);
-const world = new World(player, map, renderer);
+const grid = new Grid(map)
 
-world.start()
+const playerHex = new Hex(-3, 0, 3);
+const {x, y} = layout.hexToPixel(new Hex(-3, 0, 3));
+const player = new Player(playerHex.q, playerHex.r, playerHex.s, x, y, sprites);
+const game = new Game(player, grid, renderer);
+
+game.start();
