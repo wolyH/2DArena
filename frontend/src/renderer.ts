@@ -16,9 +16,12 @@ export class Renderer {
     static readonly DEFAULT_BACKGROUND_FILL_COLOR: string  = "#282118ff";
 
     constructor(
-        canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D,
-        uiCanvas: HTMLCanvasElement, uiCtx: CanvasRenderingContext2D, 
-        layout: Layout, background?: string
+        canvas: HTMLCanvasElement, 
+        ctx: CanvasRenderingContext2D,
+        uiCanvas: HTMLCanvasElement, 
+        uiCtx: CanvasRenderingContext2D, 
+        layout: Layout, 
+        background?: string
     ) {
         this.canvas = canvas;
         this.ctx = ctx;

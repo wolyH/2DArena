@@ -39,32 +39,26 @@ const uiCanvas = document.querySelector<HTMLCanvasElement>('#ui-canvas')!;
 const ctx = canvas.getContext('2d')!;
 const uiCtx = uiCanvas.getContext('2d')!;
 
-const width = window.innerWidth;
-const height = window.innerHeight;
+const width = document.documentElement.clientWidth;
+const height = document.documentElement.clientHeight;
 const dpr =  window.devicePixelRatio
 
-canvas.width = width;
-canvas.height = height;
+// scale the canvas by window.devicePixelRatio
+canvas.width = width * dpr;
+canvas.height = height * dpr;
+uiCanvas.width = width * dpr;
+uiCanvas.height = height *dpr;
 
-// Fixes rendering on my monitor
-if(dpr !== 1){
+// use css to bring it back to regular size
+canvas.style.width = `${width}px`;
+canvas.style.height = `${height}px`;
+uiCanvas.style.width = `${width}px`;
+uiCanvas.style.height = `${height}px`;
 
-    // scale the canvas by window.devicePixelRatio
-    canvas.width = width * dpr;
-    canvas.height = height * dpr;
-    uiCanvas.width = width * dpr;
-    uiCanvas.height = height *dpr;
+// set the scale of the context
+ctx.setTransform(1, 0, 0, 1, 0, 0);
+ctx.scale(dpr, dpr);
 
-    // use css to bring it back to regular size
-    canvas.style.width = `${width}px`;
-    canvas.style.height = `${height}px`;
-    uiCanvas.style.width = `${width}px`;
-    uiCanvas.style.height = `${height}px`;
-
-    // set the scale of the context
-    ctx.scale(dpr, dpr);
-    uiCtx.scale(dpr, dpr);
- }
 
 // divide hex horizontal size by 2 to give an isometric look
 const layout = new Layout({x: width / 2, y: height / 2}, {x: 100, y: 50});

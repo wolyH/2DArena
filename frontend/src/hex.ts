@@ -68,5 +68,4 @@ export class Hex {
     static hashCode(q: number, r: number) : string {
          return `${q}_${r}`;
     }
-
 }

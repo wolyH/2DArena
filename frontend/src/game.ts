@@ -22,6 +22,7 @@ export class Game {
     ui: Ui;
     renderer: Renderer;
     notifier: Notifier<GameEvent>
+    camera = {direction: {up: false, down: false, left: false, right: false}, offset: {x:0, y:0}};
 
     constructor(player: Player, grid: Grid, renderer: Renderer, notifier: Notifier<GameEvent>) {
         this.player = player,
@@ -47,7 +48,8 @@ export class Game {
     }
 
     private update(): void {
-       this.updatePlayer();
+        this.moveCamera();
+        this.updatePlayer();
     }
 
     private draw(): void {
@@ -113,7 +115,6 @@ export class Game {
 
         this.notifier.on("turn_skipped", () => {
             this.isPlayerTurn = !this.isPlayerTurn;
-            console.log(this.isPlayerTurn);
         });
 
         this.notifier.on("button_hovered", (button) => {
@@ -126,15 +127,11 @@ export class Game {
             }
         });
 
-        let resizeTimeout: number;
-        // Temporary fix: only resize after 150ms of no dragging
-        window.addEventListener('resize', () => {
-            clearTimeout(resizeTimeout);
-            resizeTimeout = setTimeout(() => this.resize(), 50); 
-        });
-
+        window.addEventListener('resize', () => this.resize()); 
         window.addEventListener('click', (event) => this.handleMouseClick(event));
         window.addEventListener('mousemove', (event) => this.handleMouseMove(event));
+        window.addEventListener('keydown', (event) => this.handleKeyDown(event));
+        window.addEventListener('keyup', (event) => this.handleKeyUp(event));
     }
 
 
@@ -171,8 +168,8 @@ export class Game {
         let hoveredButton = null;
         const rect = this.renderer.canvas.getBoundingClientRect();
 
-        const x = event.clientX - rect.left;
-        const y = event.clientY - rect.top;
+        const x = (event.clientX - rect.left) * window.devicePixelRatio;
+        const y = (event.clientY - rect.top) * window.devicePixelRatio;
    
         for(const button of this.ui.buttons) {
             if (button.isHit(x, y)) {
@@ -211,7 +208,7 @@ export class Game {
             this.path.show = false
             return;
         }
-        
+
         this.path.goals = [];
 
         const playerHex = this.grid.map.get(Hex.hashCode(this.player.q, this.player.r))
@@ -228,40 +225,80 @@ export class Game {
         this.path.show = true;
     }
 
+    private handleKeyDown(event: KeyboardEvent): void {
+        const key = event.key.toLowerCase();
+        
+        if (key === 'w') this.camera.direction.up = true;
+        if (key === 's') this.camera.direction.down = true;
+        if (key === 'a') this.camera.direction.left = true;
+        if (key === 'd') this.camera.direction.right = true;
+    }
+
+    private handleKeyUp(event: KeyboardEvent): void {
+        const key = event.key.toLowerCase();
+        
+        if (key === 'w') this.camera.direction.up = false;
+        if (key === 's') this.camera.direction.down = false;
+        if (key === 'a') this.camera.direction.left = false;
+        if (key === 'd') this.camera.direction.right = false;
+    }
+
+    private moveCamera(): void {
+        const offsetVector = {x: 0, y: 0};
+        const cameraSpeed = 10 / window.devicePixelRatio;
+        
+        if (this.camera.direction.left !== this.camera.direction.right) {
+            if (this.camera.direction.left) offsetVector.x = cameraSpeed;
+            if (this.camera.direction.right) offsetVector.x = -cameraSpeed;
+        }
+        if (this.camera.direction.up !== this.camera.direction.down) {
+            if (this.camera.direction.down) offsetVector.y = -cameraSpeed;
+            if (this.camera.direction.up) offsetVector.y = cameraSpeed;
+        }
+
+        this.renderer.layout.origin.x += offsetVector.x;
+        this.renderer.layout.origin.y += offsetVector.y;
+
+        this.player.x += offsetVector.x;
+        this.player.y += offsetVector.y;
+
+        for (const goal of this.path.goals) {
+            goal.x += offsetVector.x;
+            goal.y += offsetVector.y;
+        }
+
+        this.camera.offset.x += offsetVector.x;
+        this.camera.offset.y += offsetVector.y
+    }
+
     private resize(): void {
         const canvas = this.renderer.canvas;
-        const uiCanvas  =this.renderer.uiCanvas;
-        const width = window.innerWidth;
-        const height = window.innerHeight;
+        const uiCanvas = this.renderer.uiCanvas;
+        const width = document.documentElement.clientWidth;
+        const height = document.documentElement.clientHeight;
         const dpr = window.devicePixelRatio;
+
+      
+        canvas.width = width * dpr;
+        canvas.height = height * dpr;
+        uiCanvas.width = width * dpr;
+        uiCanvas.height = height * dpr;
+    
+        canvas.style.width = `${width}px`;
+        canvas.style.height = `${height}px`;
+        uiCanvas.style.width = `${width}px`;
+        uiCanvas.style.height = `${height}px`;
+
+        this.renderer.ctx.scale(dpr, dpr);
 
         // Using the diff between the old/new origin of the canvas to calculate the new position of the player on the sceen
         const oldOriginX = this.renderer.layout.origin.x;
         const oldOriginY = this.renderer.layout.origin.y;
-      
-        canvas.width = width;
-        canvas.height = height;
-        uiCanvas.width = width;
-        uiCanvas.height = height;
-      
-        if(dpr !== 1) {
-            canvas.width = width * dpr;
-            canvas.height = height * dpr;
-            uiCanvas.width = width * dpr;
-            uiCanvas.height = height * dpr;
         
-            canvas.style.width = `${width}px`;
-            canvas.style.height = `${height}px`;
-            uiCanvas.style.width = `${width}px`;
-            uiCanvas.style.height = `${height}px`;
-
-            this.renderer.ctx.scale(dpr, dpr);
-            this.renderer.uiCtx.scale(dpr, dpr);
-        }
-        
-        const newOriginX = width / 2;
-        const newOriginY = height / 2;
+        const newOriginX = width / 2 + this.camera.offset.x;
+        const newOriginY = height / 2 + this.camera.offset.y;
         this.renderer.layout.origin = { x: newOriginX, y: newOriginY };
+        
 
         let offsetX = this.player.x - oldOriginX;
         let offsetY = this.player.y - oldOriginY;

@@ -1,5 +1,5 @@
-import type { Notifier } from "./utils";
-import type { GameEvent } from "./game";
+import type { Notifier } from "./utils.ts";
+import type { GameEvent } from "./game.ts";
 
 export class Ui {
     buttons: Array<UiButton>;
@@ -12,16 +12,19 @@ export class Ui {
     }
 
     private setupSkipButton() {
-        const skipButton = new UiButton(100, 50, 100, 100, "Skip Turn", () => {
+        const width = window.innerWidth * window.devicePixelRatio;
+        const height = window.innerHeight * window.devicePixelRatio;
+
+        const skipButton = new UiButton(100, 50,  width * 0.1, height * 0.1, "Skip Turn", () => {
             this.notifier.emit("turn_skipped");
         });
         this.buttons.push(skipButton);
     }
 
     public handleInteraction(x: number, y: number): void {
-        for (const btn of this.buttons) {
-            if (btn.isHit(x, y)) {
-                btn.trigger();
+        for (const button of this.buttons) {
+            if (button.isHit(x, y)) {
+                button.trigger();
                 return;
             }
         }
