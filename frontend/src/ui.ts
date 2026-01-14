@@ -9,6 +9,7 @@ export class Ui {
         this.notifier = notifier;
         this.buttons = [];
         this.setupSkipButton();
+        this.setupShrinkButton();
     }
 
     private setupSkipButton() {
@@ -17,6 +18,16 @@ export class Ui {
 
         const skipButton = new UiButton(100, 50,  width * 0.1, height * 0.1, "Skip Turn", () => {
             this.notifier.emit("turn_skipped");
+        });
+        this.buttons.push(skipButton);
+    }
+
+    private setupShrinkButton()  {
+        const width = window.innerWidth * window.devicePixelRatio;
+        const height = window.innerHeight * window.devicePixelRatio;
+
+        const skipButton = new UiButton(100, 200,  width * 0.1, height * 0.1, "Shrink", () => {
+            this.notifier.emit("shrink_map");
         });
         this.buttons.push(skipButton);
     }

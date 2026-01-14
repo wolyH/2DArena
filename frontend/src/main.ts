@@ -59,7 +59,6 @@ uiCanvas.style.height = `${height}px`;
 ctx.setTransform(1, 0, 0, 1, 0, 0);
 ctx.scale(dpr, dpr);
 
-
 // divide hex horizontal size by 2 to give an isometric look
 const layout = new Layout({x: width / 2, y: height / 2}, {x: 100, y: 50});
 const renderer = new Renderer(canvas, ctx, uiCanvas, uiCtx, layout);
@@ -89,11 +88,18 @@ const sprites: Record<PlayerAction, Array<HTMLImageElement>> = {
     "Striking": assetManager.get("b_warrior_striking")!
 };
 
-const grid = new Grid(map)
-const playerHex = new Hex(-3, 0, 3);
-const {x, y} = layout.hexToPixel(new Hex(-3, 0, 3));
-const player = new Player(playerHex.q, playerHex.r, playerHex.s, x, y, sprites);
+const grid = new Grid(map, N)
+
+const hex1 = new Hex(-3, 0, 3);
+const hex2 = new Hex(3, 0, -3);
+
+const point1 = layout.hexToPixel(hex1);
+const point2 = layout.hexToPixel(hex2);
+
+const player1 = new Player(hex1.q, hex1.r, hex1.s, point1.x, point1.y, sprites);
+const player2 = new Player(hex2.q, hex2.r, hex2.s, point2.x, point2.y, sprites);
+
 const gameNotifier = createNotifier<GameEvent>();
-const game = new Game(player, grid, renderer, gameNotifier);
+const game = new Game([player1, player2], grid, renderer, gameNotifier);
 
 game.start();

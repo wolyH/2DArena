@@ -1,4 +1,4 @@
-import { Layout, type Point2D } from "./layout.ts";
+import { Layout } from "./layout.ts";
 import { Hex } from "./hex.ts";
 import { Player } from "./player.ts";
 import {UiButton} from "./ui.ts";
@@ -12,8 +12,11 @@ export class Renderer {
     readonly layout: Layout;
     readonly background: string;
 
+    static readonly DEFAULT_BACKGROUND_FILL_COLOR = "#282118ff";
+    static readonly DEFAULT_LINE_WIDTH = 2;
     static readonly DEFAULT_HEX_DEPTH = 30;
-    static readonly DEFAULT_BACKGROUND_FILL_COLOR: string  = "#282118ff";
+    static readonly DEFAULT_DEPTH_FILL_COLOR = "#161717ff";
+    static readonly DEFAULT_DEPTH_STROKE_COLOR = Renderer.DEFAULT_DEPTH_FILL_COLOR;
 
     constructor(
         canvas: HTMLCanvasElement, 
@@ -73,7 +76,7 @@ export class Renderer {
 
             outline.closePath();
         }
-        this.ctx.lineWidth = Hex.DEFAULT_LINE_WIDTH;
+        this.ctx.lineWidth = Renderer.DEFAULT_LINE_WIDTH;
         this.ctx.strokeStyle = Hex.DEFAULT_STROKE_COLOR;
         this.ctx.stroke(outline);
     }
@@ -101,11 +104,11 @@ export class Renderer {
             this.ctx.lineTo(corners[3].x,corners[3].y);
             this.ctx.lineTo(corners[2].x,corners[2].y);
             this.ctx.lineTo(corners[1].x,corners[1].y);
-            this.ctx.fillStyle = Hex.DEFAULT_DEPTH_COLOR;
+            this.ctx.fillStyle = Renderer.DEFAULT_DEPTH_FILL_COLOR;
             this.ctx.fill()
         }
-        this.ctx.lineWidth = Hex.DEFAULT_LINE_WIDTH;
-        this.ctx.strokeStyle = Hex.DEFAULT_DEPTH_COLOR;
+        this.ctx.lineWidth = Renderer.DEFAULT_LINE_WIDTH;
+        this.ctx.strokeStyle = Renderer.DEFAULT_DEPTH_STROKE_COLOR;
         this.ctx.stroke(outline);
     }
 
@@ -124,33 +127,40 @@ export class Renderer {
         this.ctx.restore();
     }
 
-    drawPath(path: Array<Point2D>) {
+    drawPathPreview(preview: {goals: Array<Hex>, isTraversable: boolean}) {
         const width = 20;
 
-        if(path.length < 2) {
-            throw new Error("Need at least 2 points to draw an arrow");
+        if(preview.goals.length < 2) {
+            return;
         }
 
-        this.ctx.beginPath();
-        this.ctx.moveTo(path[0].x, path[0].y);
+        const lineFillColor = preview.isTraversable ? "rgba(5, 56, 24, 0.2)" : "rgba(56, 5, 5, 0.2)";
+        const ellipseFillColor = preview.isTraversable ? "rgba(7, 51, 3, 0.91)" : "rgba(51, 3, 3, 0.91)";
 
-        // start drawing the line
+        const path = preview.goals;
+
+        const ellipsePath = new Path2D();
+        const linePath = new Path2D;
+
+        let {x, y} = this.layout.hexToPixel(path[0]);
+
+        linePath.moveTo(x, y);
+
         for (let i = 0 ; i < path.length ; i++) {
-            this.ctx.lineTo(path[i].x, path[i].y);
+            let {x, y} = this.layout.hexToPixel(path[i]);
+            linePath.lineTo(x, y);
+            ellipsePath.moveTo(x, y);
+            ellipsePath.ellipse(x, y, width, 0.5 * width, 0, 0, 2 * Math.PI);
         }
 
+        // Draw the line
         this.ctx.lineWidth = width;
         this.ctx.lineJoin = 'round';
-        this.ctx.strokeStyle = "rgba(5, 56, 24, 0.2)";
-        this.ctx.stroke();
-
-        // start drawing hex centers
-        for (let i = 0 ; i < path.length ; i++) {
-            this.ctx.beginPath();
-            this.ctx.ellipse(path[i].x, path[i].y, width, 0.5 * width, 0, 0, 2 * Math.PI);
-            this.ctx.strokeStyle = "rgba(7, 51, 3, 0.91)";
-            this.ctx.stroke();
-        }
+        this.ctx.strokeStyle = lineFillColor;
+        this.ctx.stroke(linePath);
+        // Draw the hex centers
+        this.ctx.strokeStyle = ellipseFillColor;
+        this.ctx.stroke(ellipsePath);
     }
 
     drawButton(btn: UiButton): void {

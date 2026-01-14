@@ -1,7 +1,6 @@
 import { Renderer } from "./renderer.ts";
 import { Grid } from "./grid.ts";
 import { Player } from "./player.ts";
-import type { Point2D } from "./layout.ts";
 import { Hex } from "./hex.ts";
 import type { Notifier } from "./utils.ts";
 import { Ui, UiButton } from "./ui.ts";
@@ -12,26 +11,27 @@ export type GameEvent = {
     button_hovered: (button: UiButton) => void;
     button_clicked: (button: UiButton) => void;
     turn_skipped: () => void;
+    shrink_map: () => void;
 };
 
 export class Game {
-    player: Player;
+    players: Array<Player>;
+    turn: number;
     grid: Grid;
-    isPlayerTurn: boolean;
-    path: {show: boolean, goals: Array<Point2D>};
+    path: {goals: Array<Hex>, preview: {goals: Array<Hex>, isTraversable: boolean}};
     ui: Ui;
     renderer: Renderer;
     notifier: Notifier<GameEvent>
     camera = {direction: {up: false, down: false, left: false, right: false}, offset: {x:0, y:0}};
 
-    constructor(player: Player, grid: Grid, renderer: Renderer, notifier: Notifier<GameEvent>) {
-        this.player = player,
+    constructor(players: Array<Player>, grid: Grid, renderer: Renderer, notifier: Notifier<GameEvent>) {
+        this.players = players,
         this.grid = grid,
-        this.isPlayerTurn = true,
-        this.path = {show: false, goals: []}
+        this.path = {goals: [], preview: {goals: [], isTraversable: false}};
         this.ui = new Ui(notifier);
         this.renderer = renderer;
         this.notifier = notifier;
+        this.turn = 0;
     }
 
     start(): void {
@@ -49,31 +49,60 @@ export class Game {
 
     private update(): void {
         this.moveCamera();
-        this.updatePlayer();
+        this.players.forEach((player) => this.updatePlayer(player));
+        this.updateVisibility();
+        this.updateTerrain();
     }
 
     private draw(): void {
         this.renderer.clear();
         this.renderer.drawMap(this.grid.map);
-        if(this.path.show) {
-            this.renderer.drawPath(this.path.goals);
-        }
-        
-        this.renderer.drawPlayer(this.player);
-
-        this.ui.buttons.forEach(btn => {
-            this.renderer.drawButton(btn);
-        });
+        this.renderer.drawPathPreview(this.path.preview)
+        this.players.forEach((player) => {this.renderer.drawPlayer(player);})
+        this.ui.buttons.forEach(btn => this.renderer.drawButton(btn));
     }
 
-    private updatePlayer(): void {
-        const player = this.player;
+    private setupEventListeners(): void {
+        this.notifier.on("hex_clicked", (hex) => {
+            this.startPlayerAction(hex)
+        });
+        
+        this.notifier.on("hex_hovered", (hex) => {
+            this.showPathPreview(hex);
+        });
 
+        this.notifier.on("turn_skipped", () => {
+            this.turn++;
+        });
+
+        this.notifier.on("button_hovered", (button) => {
+            button.isHovered = true;
+        });
+
+        this.notifier.on("button_clicked", (button) => {
+            const currentPlayer = this.players[this.turn % this.players.length];  
+            if (currentPlayer.isLocal && currentPlayer.is("Idle")) {
+                button.trigger();
+            }
+        });
+
+        this.notifier.on("shrink_map", () => {
+            this.grid.shrink();
+        });
+
+        window.addEventListener('resize', () => this.resize()); 
+        window.addEventListener('click', (event) => this.handleMouseClick(event));
+        window.addEventListener('mousemove', (event) => this.handleMouseMove(event));
+        window.addEventListener('keydown', (event) => this.handleKeyDown(event));
+        window.addEventListener('keyup', (event) => this.handleKeyUp(event));
+    }
+
+    private updatePlayer(player: Player): void {
         if (player.is("Moving") && this.path.goals.length === 0) {
             player.idle()
         }
         if(player.is("Moving") && this.path.goals.length > 0) {
-            const goal = this.path.goals[0];
+            const goal = this.renderer.layout.hexToPixel(this.path.goals[0]);
             const dx = goal.x - player.x;
             const dy = goal.y - player.y;
 
@@ -97,47 +126,54 @@ export class Game {
             player.x += vx;
             player.y += vy;
 
-            const {q,r,s} = this.renderer.layout.pixelToHex({x: player.x, y: player.y});
+            const [q,r,s] = this.renderer.layout.pixelToHex({x: player.x, y: player.y});
             player.setHexCoordinate(q, r, s);
         }
 
-        this.player.updateVisual();
+        player.updateVisual();
     }
 
-    private setupEventListeners(): void {
-        this.notifier.on("hex_clicked", (hex) => {
-            this.startPlayerAction(hex)
-        });
-        
-        this.notifier.on("hex_hovered", (hex) => {
-            this.showPathPreview(hex);
-        });
+    private updateVisibility(): void {
+        const fov: Array<string> = [];
 
-        this.notifier.on("turn_skipped", () => {
-            this.isPlayerTurn = !this.isPlayerTurn;
-        });
-
-        this.notifier.on("button_hovered", (button) => {
-            button.isHovered = true;
-            this.path.show = false;
-        });
-        this.notifier.on("button_clicked", (button) => {
-            if (this.player.is("Idle")) {
-                button.trigger();
+        this.players.forEach((player) => {
+            const playerHex = this.grid.map.get(Hex.hashCode(player.q, player.r));
+            if(!playerHex) {
+                throw new Error("player not on grid");
             }
-        });
-
-        window.addEventListener('resize', () => this.resize()); 
-        window.addEventListener('click', (event) => this.handleMouseClick(event));
-        window.addEventListener('mousemove', (event) => this.handleMouseMove(event));
-        window.addEventListener('keydown', (event) => this.handleKeyDown(event));
-        window.addEventListener('keyup', (event) => this.handleKeyUp(event));
+            fov.push(...this.grid.getFOV(playerHex));
+        })
+        
+        for (const hex of this.grid.map.values()) {
+            if(fov.includes(hex.hashCode())) {
+                hex.setVisibility(true);
+            }
+            else {
+                hex.setVisibility(false);
+            }
+        }
     }
 
+    private updateTerrain() {
+        const playerHexes: Array<string> = []
+
+        this.players.forEach((player) => {
+            playerHexes.push(Hex.hashCode(player.q, player.r));
+        })
+
+        for (const hex of this.grid.map.values()) {
+            if (playerHexes.includes(hex.hashCode())) {
+                hex.hasPlayer = true;
+            }
+            else {
+                hex.hasPlayer = false;
+            }
+        }
+    }
 
     private handleMouseMove(event: MouseEvent): void {
-
         const button = this.getButtonFromEvent(event)
+
         if (button) {
             this.notifier.emit("button_hovered", button);
             return;
@@ -145,23 +181,18 @@ export class Game {
         const hex = this.getHexFromEvent(event);
         if (hex) {
             this.notifier.emit("hex_hovered", hex);
-        } else {
-            this.path.show = false;
         }
     }
 
-    private getHexFromEvent(event: MouseEvent): Hex | null {
+    private getHexFromEvent(event: MouseEvent): Hex | undefined {
         const rect = this.renderer.canvas.getBoundingClientRect();
 
-        const hex = this.renderer.layout.pixelToHex({
+        const [q,r,_] = this.renderer.layout.pixelToHex({
                 x: event.clientX - rect.left, 
                 y: event.clientY - rect.top
             });
 
-        if (this.grid.map.has(hex.hashCode())) {
-            return hex;
-        }
-        return null;
+        return this.grid.map.get(Hex.hashCode(q,r));
     }
 
     public getButtonFromEvent(event: MouseEvent): UiButton | null {
@@ -187,42 +218,55 @@ export class Game {
             return;
         }
         const hex = this.getHexFromEvent(event);
-        if (hex) {
+    
+        if (hex && hex.isVisible && !hex.isObstacle) {
             this.notifier.emit("hex_clicked", hex);
         }
     }
 
     private startPlayerAction(hex: Hex): void {
-        if(!this.player.is("Idle") || !this.isPlayerTurn) {
+        const currentPlayer = this.players[this.turn % this.players.length];  
+        if(!currentPlayer.is("Idle") || !currentPlayer.isLocal) {
             return;
         }
-
+        
         if(this.grid.map.has(hex.hashCode())) {
-            this.player.move()
-            this.path.show = false;
+            const playerHex = this.grid.map.get(Hex.hashCode(currentPlayer.q, currentPlayer.r))
+
+            if(!playerHex) throw new Error("player not on grid");
+
+            const goals = this.grid.searchPath(playerHex, hex);
+            if(goals.length > 1) {
+                this.path.goals = goals;
+                currentPlayer.move();
+                this.path.preview = {goals: [], isTraversable: false};
+            }
         }
     }
 
     private showPathPreview(hex: Hex): void {
-         if(!this.player.is("Idle") || !this.isPlayerTurn || this.player.isAt(hex)) {
-            this.path.show = false
+         const currentPlayer = this.players[this.turn % this.players.length];
+         if(!currentPlayer.is("Idle") || !currentPlayer.isLocal || currentPlayer.isAt(hex)) {
+            this.path.preview = {goals: [], isTraversable: false};
             return;
         }
 
-        this.path.goals = [];
+        this.path.preview = {goals: [], isTraversable: false};
 
-        const playerHex = this.grid.map.get(Hex.hashCode(this.player.q, this.player.r))
-        if(!playerHex) {
-            throw new Error("player not on grid");
+        const playerHex = this.grid.map.get(Hex.hashCode(currentPlayer.q, currentPlayer.r))
+
+        if(!playerHex) throw new Error("player not on grid");
+
+        let goals = this.grid.searchPath(playerHex, hex);
+        if (goals.length > 1) {
+            this.path.preview = {goals: goals, isTraversable: true};
+            return;
         }
 
-        const path = this.grid.searchPath(playerHex, hex);
-
-        for(const h of path) {
-            this.path.goals.push(this.renderer.layout.hexToPixel(h));
+        goals = this.grid.searchPath(playerHex, hex, false);
+        if (goals) {
+            this.path.preview = {goals: goals, isTraversable: false};
         }
-
-        this.path.show = true;
     }
 
     private handleKeyDown(event: KeyboardEvent): void {
@@ -246,7 +290,7 @@ export class Game {
     private moveCamera(): void {
         const offsetVector = {x: 0, y: 0};
         const cameraSpeed = 10 / window.devicePixelRatio;
-        
+
         if (this.camera.direction.left !== this.camera.direction.right) {
             if (this.camera.direction.left) offsetVector.x = cameraSpeed;
             if (this.camera.direction.right) offsetVector.x = -cameraSpeed;
@@ -259,13 +303,10 @@ export class Game {
         this.renderer.layout.origin.x += offsetVector.x;
         this.renderer.layout.origin.y += offsetVector.y;
 
-        this.player.x += offsetVector.x;
-        this.player.y += offsetVector.y;
-
-        for (const goal of this.path.goals) {
-            goal.x += offsetVector.x;
-            goal.y += offsetVector.y;
-        }
+        this.players.forEach((player) => {
+            player.x += offsetVector.x;
+            player.y += offsetVector.y;
+        })
 
         this.camera.offset.x += offsetVector.x;
         this.camera.offset.y += offsetVector.y
@@ -277,7 +318,6 @@ export class Game {
         const width = document.documentElement.clientWidth;
         const height = document.documentElement.clientHeight;
         const dpr = window.devicePixelRatio;
-
       
         canvas.width = width * dpr;
         canvas.height = height * dpr;
@@ -297,20 +337,13 @@ export class Game {
         
         const newOriginX = width / 2 + this.camera.offset.x;
         const newOriginY = height / 2 + this.camera.offset.y;
-        this.renderer.layout.origin = { x: newOriginX, y: newOriginY };
-        
+        this.renderer.layout.origin = {x: newOriginX, y: newOriginY};
 
-        let offsetX = this.player.x - oldOriginX;
-        let offsetY = this.player.y - oldOriginY;
-
-        this.player.x = newOriginX + offsetX;
-        this.player.y = newOriginY + offsetY;
-
-        for(const goal of this.path.goals) {
-            offsetX = goal.x - oldOriginX;
-            offsetY = goal.y - oldOriginY;
-            goal.x = newOriginX + offsetX;
-            goal.y = newOriginY + offsetY;
-        }
+        this.players.forEach((player) => {
+            const offsetX = player.x - oldOriginX;
+            const offsetY = player.y - oldOriginY;
+            player.x = newOriginX + offsetX;
+            player.y = newOriginY + offsetY;
+        })
     }
 }

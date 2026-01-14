@@ -54,7 +54,7 @@ export class Layout {
         };
     }
 
-    pixelToHex(p: Point2D): Hex {
+    pixelToHex(p: Point2D): [number, number, number] {
         const point = {
             x: (p.x - this.origin.x) / this.size.x, 
             y: (p.y - this.origin.y) / this.size.y
@@ -62,20 +62,18 @@ export class Layout {
         const q = (this.b0 * point.x + this.b1 * point.y);
         const r = (this.b2 * point.x + this.b3 * point.y);
 
-        return this.round(new Hex(q, r, -q-r));
+        return this.round(q, r, -q-r);
     }
 
-    private round(h: Hex): Hex {
+    private round(qi: number, ri: number, si: number): [number, number, number] {
 
+        let q = Math.round(qi);
+        let r = Math.round(ri);
+        let s = Math.round(si);
 
-
-        let q = Math.round(h.q);
-        let r = Math.round(h.r);
-        let s = Math.round(h.s);
-
-        const q_diff = Math.abs(q - h.q)
-        const r_diff = Math.abs(r - h.r)
-        const s_diff = Math.abs(s - h.s)
+        const q_diff = Math.abs(q - qi)
+        const r_diff = Math.abs(r - ri)
+        const s_diff = Math.abs(s - si)
 
         if (q_diff > r_diff && q_diff > s_diff) {
             q = -r-s
@@ -87,6 +85,6 @@ export class Layout {
             s = -q-r
         }
 
-        return new Hex(q, r, s);
+        return [q, r, s];
     }
 }

@@ -1,55 +1,45 @@
 export class Hex {
-    readonly #q: number;
-    readonly #r: number;
-    readonly #s: number;
+    readonly q: number;
+    readonly r: number;
+    readonly s: number;
 
-    fillColor: string | CanvasPattern;
+    #isVisible: boolean;
+
+    fillColor: string;
     strokeColor: string;
+    isObstacle : boolean = false;
+    hasPlayer: boolean = false;
 
     static readonly DEFAULT_FILL_COLOR = "#607c7fff";
+    static readonly DEFAULT_HIDDEN_FILL_COLOR = "#303e40ff"
     static readonly DEFAULT_STROKE_COLOR = "#0a0a0aff";
-    static readonly DEFAULT_DEPTH_COLOR = "#161717ff";
-    static readonly DEFAULT_LINE_WIDTH = 2;
 
     /**
      * Creates a new Hexagon using Cube coordinates.
      * @throws {Error} If the sum of q, r, and s is not zero.
      */
-    constructor(
-        q: number, 
-        r: number, 
-        s: number, 
-        fillColor?: CanvasPattern, 
-        strokeColor: string = Hex.DEFAULT_STROKE_COLOR,
-    ) {
+    constructor(q: number, r: number, s: number) {
         if (Math.round(q + r + s) !== 0) {
             throw Error("q + r + s must be 0");
         }
 
-        this.#q = q;
-        this.#r = r;
-        this.#s = s;
+        this.q = q;
+        this.r = r;
+        this.s = s;
 
-        if(fillColor) {
-            this.fillColor = fillColor
-        }
-        else {
-            this.fillColor = Hex.DEFAULT_FILL_COLOR;
-        }
+        this.#isVisible = false;
 
-        this.strokeColor = strokeColor;
+        this.fillColor = Hex.DEFAULT_HIDDEN_FILL_COLOR;
+        this.strokeColor = Hex.DEFAULT_STROKE_COLOR;
     }
 
-    get q(): number {
-        return this.#q;
+    get isVisible(): boolean {
+        return this.#isVisible;
     }
 
-    get r(): number {
-        return this.#r;
-    }
-
-    get s(): number {
-        return this.#s;
+    setVisibility(isVisible: boolean): void {
+        this.#isVisible = isVisible;
+        this.fillColor = this.#isVisible? Hex.DEFAULT_FILL_COLOR: Hex.DEFAULT_HIDDEN_FILL_COLOR;
     }
 
     distance(other: Hex): number {

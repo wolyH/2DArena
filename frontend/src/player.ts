@@ -18,6 +18,8 @@ export class Player {
     //speed of the player moving on the screen
     speed: number
 
+    isLocal: boolean = true;
+
     private direction: Direction;
     private action: PlayerAction;
     private spriteIdx: number;
