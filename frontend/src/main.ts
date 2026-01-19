@@ -8,98 +8,70 @@ import { Hex } from './hex.ts';
 import { AssetManager } from './utils.ts';
 import { Grid } from './grid.ts';
 import { createNotifier } from './utils.ts';
-import type { GameEvent } from './game.ts';
+import type { GameEvent, UiEvent } from './game.ts';
 
 const assetManager = new AssetManager();
-const urls = new Map<string, Array<string>>();
 
-urls.set(
-  "b_warrior_idle", ["./b_warrior/idle/sprite_1.png","./b_warrior/idle/sprite_2.png","./b_warrior/idle/sprite_3.png","./b_warrior/idle/sprite_4.png","./b_warrior/idle/sprite_5.png","./b_warrior/idle/sprite_6.png","./b_warrior/idle/sprite_7.png"],
-);
-urls.set(
-  "b_warrior_moving", ["./b_warrior/moving/sprite_0.png","./b_warrior/moving/sprite_1.png","./b_warrior/moving/sprite_2.png","./b_warrior/moving/sprite_3.png","./b_warrior/moving/sprite_4.png","./b_warrior/moving/sprite_5.png"]
-);
-
-urls.set(
-  "b_warrior_striking", ["./b_warrior/striking/sprite_0.png","./b_warrior/striking/sprite_1.png","./b_warrior/striking/sprite_2.png","./b_warrior/striking/sprite_3.png"]
-);
-
-urls.set(
-  "spikes", ["./spikes/spike_0.png", "./spikes/spike_1.png", "./spikes/spike_2.png", "./spikes/spike_3.png", "./spikes/spike_4.png"]
-);
+const urls: Array<[string, string, number]> = [
+  ["black_idle", "./black/idle", 8],
+  ["black_moving", "./black/moving", 6],
+  ["black_striking", "./black/striking", 4],
+  ["dust", "./dust", 4],
+  ["cursor", "./cursor/sword", 1]
+];
 
 await assetManager.loadSprites(urls);
 
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = 
   `<canvas id="game-canvas"></canvas>
-    <canvas id="ui-canvas"></canvas>`;
+   <canvas id="ui-canvas"></canvas>`;
 
-const canvas = document.querySelector<HTMLCanvasElement>('#game-canvas')!;
-const uiCanvas = document.querySelector<HTMLCanvasElement>('#ui-canvas')!;
-const ctx = canvas.getContext('2d')!;
-const uiCtx = uiCanvas.getContext('2d')!;
+const width = window.innerWidth;
+const height = window.innerHeight;
 
-const width = document.documentElement.clientWidth;
-const height = document.documentElement.clientHeight;
-const dpr =  window.devicePixelRatio
-
-// scale the canvas by window.devicePixelRatio
-canvas.width = width * dpr;
-canvas.height = height * dpr;
-uiCanvas.width = width * dpr;
-uiCanvas.height = height *dpr;
-
-// use css to bring it back to regular size
-canvas.style.width = `${width}px`;
-canvas.style.height = `${height}px`;
-uiCanvas.style.width = `${width}px`;
-uiCanvas.style.height = `${height}px`;
-
-// set the scale of the context
-ctx.setTransform(1, 0, 0, 1, 0, 0);
-ctx.scale(dpr, dpr);
-
-// divide hex horizontal size by 2 to give an isometric look
+//Divide hex horizontal size by 2 to give an isometric look
 const layout = new Layout({x: width / 2, y: height / 2}, {x: 100, y: 50});
-const renderer = new Renderer(canvas, ctx, uiCanvas, uiCtx, layout);
+const renderer = new Renderer(layout);
 
-//Row r size is 2*N+1 - abs(N-r)
-const N = 4;
+const N = 5;
 const map = new Map<string, Hex>();
 
-// Store the map (hexagon shaped)
+//Store the map (hexagonal)
 for (let q = -N; q <= N; q++) {
   const r1 = Math.max(-N, -q - N);
   const r2 = Math.min(N, -q + N);
 
   for(let r = r1 ; r <= r2 ; r++) {
-    const h = new Hex(q, r, -q-r);
-    map.set(h.hashCode(), h);
+    const hex = new Hex(q, r, -q-r);
+    map.set(hex.hashCode, hex);
   }
 }
 
-map.delete(Hex.hashCode(-4,0));
-map.delete(Hex.hashCode(4,0));
+map.delete(Hex.hashCode(-N,0));
+map.delete(Hex.hashCode(N,0));
 map.delete(Hex.hashCode(0,0));
 
 const sprites: Record<PlayerAction, Array<HTMLImageElement>> = {
-    "Idle": assetManager.get("b_warrior_idle")!,
-    "Moving": assetManager.get("b_warrior_moving")!,
-    "Striking": assetManager.get("b_warrior_striking")!
+    "Idle": assetManager.get("black_idle")!,
+    "Moving": assetManager.get("black_moving")!,
+    "Striking": assetManager.get("black_striking")!,
+    "Dying": assetManager.get("dust")!
 };
 
-const grid = new Grid(map, N)
+const grid = new Grid(map, N);
 
-const hex1 = new Hex(-3, 0, 3);
-const hex2 = new Hex(3, 0, -3);
+const hex1 = map.get(Hex.hashCode(-(N-1), 0))!;
 
-const point1 = layout.hexToPixel(hex1);
-const point2 = layout.hexToPixel(hex2);
+const hex2 = map.get(Hex.hashCode(N-1, 0))!;
 
-const player1 = new Player(hex1.q, hex1.r, hex1.s, point1.x, point1.y, sprites);
-const player2 = new Player(hex2.q, hex2.r, hex2.s, point2.x, point2.y, sprites);
+const [x1, y1] = layout.hexToPixel(hex1);
+const [x2, y2] = layout.hexToPixel(hex2);
 
-const gameNotifier = createNotifier<GameEvent>();
+const player1 = Player.createAlly(hex1, x1, y1, sprites);
+
+const player2 = Player.createAlly(hex2, x2, y2, sprites);
+
+const gameNotifier = createNotifier<GameEvent & UiEvent>();
 const game = new Game([player1, player2], grid, renderer, gameNotifier);
 
 game.start();

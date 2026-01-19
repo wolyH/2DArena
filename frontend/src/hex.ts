@@ -1,3 +1,5 @@
+import { Player } from "./player.ts";
+
 export class Hex {
     readonly q: number;
     readonly r: number;
@@ -7,18 +9,16 @@ export class Hex {
 
     fillColor: string;
     strokeColor: string;
-    isObstacle : boolean = false;
-    hasPlayer: boolean = false;
+    isObstacle: boolean;
+    player?: Player;
+
+    readonly hashCode: string;
 
     static readonly DEFAULT_FILL_COLOR = "#607c7fff";
     static readonly DEFAULT_HIDDEN_FILL_COLOR = "#303e40ff"
     static readonly DEFAULT_STROKE_COLOR = "#0a0a0aff";
 
-    /**
-     * Creates a new Hexagon using Cube coordinates.
-     * @throws {Error} If the sum of q, r, and s is not zero.
-     */
-    constructor(q: number, r: number, s: number) {
+    constructor(q: number, r: number, s: number, isObstacle: boolean = false) {
         if (Math.round(q + r + s) !== 0) {
             throw Error("q + r + s must be 0");
         }
@@ -27,7 +27,10 @@ export class Hex {
         this.r = r;
         this.s = s;
 
+        this.hashCode =`${q}_${r}`;
+
         this.#isVisible = false;
+        this.isObstacle = isObstacle;
 
         this.fillColor = Hex.DEFAULT_HIDDEN_FILL_COLOR;
         this.strokeColor = Hex.DEFAULT_STROKE_COLOR;
@@ -50,11 +53,16 @@ export class Hex {
         );
     }
 
-    hashCode(): string {
-        return Hex.hashCode(this.q, this.r);
+    equals(other: Hex): boolean {
+         return this.q === other.q && this.r === other.r && this.s === other.s;
+    }
+
+    
+    isNeighbor(other: Hex): boolean {
+        return this.distance(other) === 1;
     }
     
-    // Coordinate s is redundant and delimiter choice doesn't matter here
+    //Coordinate s is redundant
     static hashCode(q: number, r: number) : string {
          return `${q}_${r}`;
     }

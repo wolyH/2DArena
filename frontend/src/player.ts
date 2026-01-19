@@ -1,120 +1,135 @@
 import { Hex } from "./hex.ts";
 
-export type PlayerAction = "Idle" | "Moving" | "Striking";
+export type PlayerAction = "Idle" | "Moving" | "Striking" | "Dying";
 
-type Direction = 1 | -1
+type Direction = 1 | -1;
 
 export class Player {
-
-    // position of the hex most adjacent to the player on the grid
-    #q: number;
-    #r: number;
-    #s: number;
+    //position of the hex most adjacent to the player on the grid
+    #hex: Hex
 
     //position of the player on the screen
     x: number;
     y: number;
 
     //speed of the player moving on the screen
-    speed: number
+    readonly speed: number;
 
-    isLocal: boolean = true;
+    static readonly VISIBILITY_RANGE = 2;
 
-    private direction: Direction;
-    private action: PlayerAction;
-    private spriteIdx: number;
-    private sprites: Record<PlayerAction, Array<HTMLImageElement>>;
-    private frameCounter: number;
-    private static readonly ANIMATION_SPEED = 40;
-    private static readonly LEFT  = -1;
-    private static readonly RIGHT = 1;
+    //if the player is on my team or not
+    readonly isAlly: boolean;
+    #isDead: boolean;
+    #deathAnimationOver?: boolean;
 
-    constructor(
-        q: number, 
-        r: number, 
-        s: number,
+    #direction: Direction;
+    static readonly LEFT = -1;
+    static readonly RIGHT = 1;
+
+    #action: PlayerAction;
+
+    #spriteIdx: number;
+    #sprites: Record<PlayerAction, Array<HTMLImageElement>>;
+    #frameCounter: number;
+
+    static readonly #ANIMATION_SPEED = 40;
+
+    private constructor(
+        hex: Hex,
         x: number,
         y: number,
         sprites: Record<PlayerAction, Array<HTMLImageElement>>,
-        speed: number = 1  
+        speed: number = 1,
+        isAlly: boolean
     ) {
-        if (Math.round(q + r + s) !== 0) {
-            throw Error("q + r + s must be 0");
-        }
-        this.#q = q;
-        this.#r = r;
-        this.#s = s;
+
+        this.#hex = hex;
+        hex.player = this;
 
         this.x = x;
         this.y = y;
 
         this.speed = speed;
 
-        this.direction = Player.RIGHT;
-        this.action  = "Idle";
-        this.spriteIdx = 0;
-        this.sprites = sprites;
-        this.frameCounter = 0;
+        this.#direction = Player.RIGHT;
+        this.#action  = "Idle";
+        this.#spriteIdx = 0;
+        this.#sprites = sprites;
+        this.#frameCounter = Player.#ANIMATION_SPEED;
+        
+        this.isAlly = isAlly;
+        this.#isDead = false;
     }
 
-    get q(): number {
-        return this.#q;
+    static createAlly(  
+        hex: Hex,
+        x: number,
+        y: number,
+        sprites: Record<PlayerAction, Array<HTMLImageElement>>,
+        speed: number = 1) 
+    {
+        return new Player(hex, x, y, sprites, speed, true);
     }
 
-    get r(): number {
-        return this.#r;
+    static createEnemy(  
+        hex: Hex,
+        x: number,
+        y: number,
+        sprites: Record<PlayerAction, Array<HTMLImageElement>>,
+        speed: number = 1) 
+    {
+        return new Player(hex, x, y, sprites, speed, false);
     }
 
-    get s(): number {
-        return this.#s;
+    get hex(): Hex {
+        return this.#hex;
     }
 
-    setHexCoordinate(q: number, r: number, s: number): void {
-        if (Math.round(q + r + s) !== 0) {
-            throw Error("q + r + s must be 0");
-        }
-        this.#q = q;
-        this.#r = r;
-        this.#s = s;
+    get direction(): number {
+        return this.#direction;
     }
 
-    isAt(hex: Hex): boolean {
-        return hex.q === this.q && hex.r === this.r && hex.s === this.s;
+    get isDead(): boolean {
+        return this.#isDead;
+    }
+
+    get deathAnimationOver(): boolean | undefined {
+        return this.#deathAnimationOver;
     }
 
     updateVisual(): void {
-        this.frameCounter++
+        this.#frameCounter++
 
-        if (this.frameCounter >= Player.ANIMATION_SPEED) {
-            this.frameCounter = 0;
+        if (this.#frameCounter >= Player.#ANIMATION_SPEED) {
+            this.#frameCounter = 0;
 
-            const nextIdx = this.spriteIdx + 1;
-            const spriteSheet = this.sprites[this.action];
+            const spriteSheet = this.#sprites[this.#action];
 
             if(!spriteSheet) {
-                throw new Error(`Sprite sheet is null for PlayerAction: ${this.action}`);
+                throw new Error(`Sprite sheet is null for PlayerAction: ${this.#action}`);
             }
-            else if (nextIdx >= spriteSheet.length) {
-                if (this.action === "Striking") {
+            else if (this.#spriteIdx + 1 >= spriteSheet.length) {
+                if (this.#action === "Striking") {
                     this.idle();
+                } else if (this.#action === "Dying"){
+                    this.#deathAnimationOver = true;    
                 }
-                else {
-                    this.spriteIdx = 0;
-                }
+
+                this.#spriteIdx = 0;
             }
             else {
-                this.spriteIdx = nextIdx;
+                this.#spriteIdx += 1;
             }
         }
     }
 
     getCurrentSprite(): HTMLImageElement {
-        const spriteSheet = this.sprites[this.action];
+        const spriteSheet = this.#sprites[this.#action];
 
         if(spriteSheet) {
-            return spriteSheet[this.spriteIdx];
+            return spriteSheet[this.#spriteIdx];
         }
-        throw new Error(`Sprite sheet is null for PlayerAction: ${this.action}`);
+        throw new Error(`Sprite sheet is null for PlayerAction: ${this.#action}`);
     }
 
     move(): void {
@@ -129,34 +144,48 @@ export class Player {
         this.changeAction("Idle");
     }
 
+    die(): void {
+        if (this.#isDead) {
+            throw new Error("player is already dead");
+        }
+        this.#isDead = true;
+        this.hex.player = undefined;
+        this.changeAction("Dying");
+    }
+
+    setHex(hex: Hex): void {
+        if(hex.isObstacle || hex.player) {
+            throw Error("player cannot be on an obstacle or another player");
+        }
+        this.hex.player = undefined;
+        this.#hex = hex;
+        hex.player = this;
+    }
+
     private changeAction(action: PlayerAction): void {
-        if (this.action !== action) {
-            this.action = action;
-            const spriteSheet = this.sprites[this.action];
+        if (this.#action !== action) {
+            this.#action = action;
+            const spriteSheet = this.#sprites[this.#action];
             if(spriteSheet) {
-                // The animation starts instantly at next frame
-                this.spriteIdx = this.sprites[action].length - 1;
-                this.frameCounter = Player.ANIMATION_SPEED;
+                //The animation starts instantly at next frame
+                this.#frameCounter = Player.#ANIMATION_SPEED;
+                this.#spriteIdx = 0;
             }
             else  {
-                throw new Error(`Sprite sheet is null for PlayerAction: ${this.action}`);
+                throw new Error(`Sprite sheet is null for PlayerAction: ${this.#action}`);
             }
         }
     }
 
     is(action: PlayerAction): boolean {
-        return this.action === action;
+        return this.#action === action;
     }
 
     turnLeft(): void {
-        this.direction = Player.LEFT;
+        this.#direction = Player.LEFT;
     }
 
     turnRight(): void {
-        this.direction = Player.RIGHT;
-    }
-
-    getDirection(): Direction {
-        return this.direction;
+        this.#direction = Player.RIGHT;
     }
 }

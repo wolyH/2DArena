@@ -3,42 +3,32 @@ import type { GameEvent } from "./game.ts";
 
 export class Ui {
     buttons: Array<UiButton>;
-    private notifier: Notifier<GameEvent>;
+    #notifier: Notifier<GameEvent>;
 
     constructor(notifier: Notifier<GameEvent>) {
-        this.notifier = notifier;
+        this.#notifier = notifier;
         this.buttons = [];
-        this.setupSkipButton();
-        this.setupShrinkButton();
+
+        const dpr = window.devicePixelRatio;
+        const width = window.innerWidth * dpr;
+        const height = window.innerHeight * dpr;
+
+        this.setupSkipButton(width, height);
+        this.setupShrinkButton(width, height);
     }
 
-    private setupSkipButton() {
-        const width = window.innerWidth * window.devicePixelRatio;
-        const height = window.innerHeight * window.devicePixelRatio;
-
+    private setupSkipButton(width: number, height: number) {
         const skipButton = new UiButton(100, 50,  width * 0.1, height * 0.1, "Skip Turn", () => {
-            this.notifier.emit("turn_skipped");
+            this.#notifier.emit("turn_skipped");
         });
         this.buttons.push(skipButton);
     }
 
-    private setupShrinkButton()  {
-        const width = window.innerWidth * window.devicePixelRatio;
-        const height = window.innerHeight * window.devicePixelRatio;
-
+    private setupShrinkButton(width: number, height: number) {
         const skipButton = new UiButton(100, 200,  width * 0.1, height * 0.1, "Shrink", () => {
-            this.notifier.emit("shrink_map");
+            this.#notifier.emit("shrink_map");
         });
         this.buttons.push(skipButton);
-    }
-
-    public handleInteraction(x: number, y: number): void {
-        for (const button of this.buttons) {
-            if (button.isHit(x, y)) {
-                button.trigger();
-                return;
-            }
-        }
     }
 }
 
@@ -57,7 +47,7 @@ export class UiButton {
         width: number,
         height: number,
         label: string,
-        onClick: () => void 
+        onClick: () => void
     ) {
         this.x = x;
         this.y = y;

@@ -5,15 +5,17 @@ export class AssetManager {
         this.sprites = new Map<string, Array<HTMLImageElement>>();
     }
 
-    async loadSprites(urls: Map<string, Array<string>>) {
+    async loadSprites(urls: Array<[string, string, number]>) {
         const promises: Array<Promise<void>> = [];
 
-        urls.forEach((spriteUrls, spriteName) => {
-            if (!this.sprites.has(spriteName)) {
-                this.sprites.set(spriteName, []);
+        urls.forEach(([name, path, numFiles]) => {
+            if (!this.sprites.has(name)) {
+                this.sprites.set(name, []);
             }
-            const arr = this.sprites.get(spriteName)!
-            for (let url of spriteUrls) {
+
+            const arr = this.sprites.get(name)!;
+            for (let i = 1 ; i <= numFiles ; i++) {
+                const url  =`${path}/sprite_${i}.png`;
                 const img = new Image();
                 promises.push(new Promise<void>((resolve, reject) => {
                     img.onload = () => resolve();
