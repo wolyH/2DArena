@@ -1,16 +1,60 @@
 import { Hex } from "./hex.ts";
-import { Player } from "./player.ts";
+import { Unit } from "./unit.ts";
 
 export class Grid {
-    map: Map<string, Hex>;
-    visibilityMap: Map<string, Array<string>>;
+    #map: Map<string, Hex>;
+    #visibilityMap: Map<string, Array<string>>;
     #shrinkLevel: number;
+    #n: number;
 
-    constructor(map: Map<string, Hex>, shrinkLevel: number) {
-        this.map = map;
-        this.#shrinkLevel = shrinkLevel
-        this.visibilityMap = new Map();
+    constructor(n: number) {
+        this.#n = n;
+        this.#shrinkLevel = n;
+        this.#map = new Map<string, Hex>();
+        this.fillMap();
+        this.#visibilityMap = new Map();
         this.updateVisibilityMap();
+    }
+
+    getHex(hashCode : string): Hex | undefined {
+        return this.#map.get(hashCode);
+    }
+
+    hasHex(hashCode : string): boolean {
+        return this.#map.has(hashCode);
+    }
+
+    getMap(): Array<Hex> {
+        return [...this.#map.values()];
+    }
+
+    resetMap(): void {
+        this.#map.clear();
+        this.fillMap();
+        this.updateVisibilityMap();
+        this.#shrinkLevel = this.#n;
+    }
+
+    get n(): number {
+        return this.#n;
+    }
+
+    private fillMap(): void {
+        const n = this.#n;
+        //hexagonal shape
+        for (let q = -n; q <= n; q++) {
+          const r1 = Math.max(-n, -q - n);
+          const r2 = Math.min(n, -q + n);
+        
+          for(let r = r1 ; r <= r2 ; r++) {
+            const hex = new Hex(q, r, -q-r);
+            this.#map.set(hex.hashCode, hex);
+          }
+        }
+
+        this.#map.delete(Hex.hashCode(-n,0));
+        this.#map.delete(Hex.hashCode(n,0));
+        this.#map.delete(Hex.hashCode(0,0));
     }
 
     //return the list of neighbors and if the list contains the goal or not (eg. early exit)
@@ -23,8 +67,8 @@ export class Grid {
         ]
 
         for(const vector of direction_vectors) {
-            const neighbor = this.map.get(Hex.hashCode(h.q + vector.q, h.r + vector.r))
-            if (neighbor && !neighbor.player && !neighbor.isObstacle && (isVisible ? neighbor.isVisible : true)) {
+            const neighbor = this.#map.get(Hex.hashCode(h.q + vector.q, h.r + vector.r))
+            if (neighbor && !neighbor.unit && !neighbor.isObstacle && (isVisible ? neighbor.isVisible : true)) {
                 neighbors.push(neighbor);
                 if(goal.hashCode === neighbor.hashCode) {
                     return [neighbors, true];
@@ -76,7 +120,7 @@ export class Grid {
             if(!previous_hash) {
                 return []
             }
-            const previous = this.map.get(previous_hash);
+            const previous = this.#map.get(previous_hash);
             if (!previous) {
                 return [];
             }
@@ -89,7 +133,7 @@ export class Grid {
     }
 
     getFov(hex: Hex): Array<string> {
-        const fov = this.visibilityMap.get(hex.hashCode);
+        const fov = this.#visibilityMap.get(hex.hashCode);
         if(fov) {
             return fov;
         }
@@ -103,27 +147,27 @@ export class Grid {
 
         for (let q = -range; q <= +range ; q++) {
             for (let r = Math.max(-range, -q-range) ; r <= Math.min(+range, -q+range) ; r++) {
-                const hex = this.map.get(Hex.hashCode(q,r));
+                const hex = this.#map.get(Hex.hashCode(q,r));
                 if (hex) {
                     newMap.set(hex.hashCode, hex);
                 }
             }
         }
-        this.map = newMap;
+        this.#map = newMap;
         this.updateVisibilityMap();
     }
 
-    private updateVisibilityMap(visibilityRange: number = Player.VISIBILITY_RANGE): void {
-        this.visibilityMap.clear();
+    private updateVisibilityMap(visibilityRange: number = Unit.VISIBILITY_RANGE): void {
+        this.#visibilityMap.clear();
 
-        for (const h1 of this.map.values()) {
+        for (const h1 of this.#map.values()) {
             const fov: Array<string> = [];
-            for (const h2 of this.map.values()) {
+            for (const h2 of this.#map.values()) {
                 if (this.rayCast(h1,h2, visibilityRange)) {
                     fov.push(h2.hashCode);
                 }
             }
-            this.visibilityMap.set(h1.hashCode, fov);
+            this.#visibilityMap.set(h1.hashCode, fov);
         }
     }
 
@@ -144,7 +188,7 @@ export class Grid {
 
         for (let i = 0 ; i <= distance ; i++) {
             const [q,r,_] = this.cube_lerp(h1, h2, 1.0 / visibilityRange * i)
-            const hex = this.map.get(Hex.hashCode(q, r))
+            const hex = this.#map.get(Hex.hashCode(q, r))
             if (hex && !hex.isObstacle) {
                 isVisible = true;
             }

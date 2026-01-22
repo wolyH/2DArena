@@ -1,7 +1,8 @@
 import { Layout } from "./layout.ts";
 import { Hex } from "./hex.ts";
-import { Player } from "./player.ts";
-import {UiButton} from "./ui.ts";
+import { Unit } from "./unit.ts";
+import { UIButton } from "./ui.ts";
+import type { Grid } from "./grid.ts";
 
 export class Renderer {
     readonly gameCanvas: HTMLCanvasElement;
@@ -13,7 +14,8 @@ export class Renderer {
     readonly #mapCacheCanvas: HTMLCanvasElement;
     readonly #mapCacheCtx: CanvasRenderingContext2D;
 
-    readonly layout: Layout;
+    readonly #layout: Layout;
+    readonly #grid: Grid;
     readonly background: string;
 
     static readonly DEFAULT_BACKGROUND_FILL_COLOR = "#282118ff";
@@ -21,13 +23,14 @@ export class Renderer {
     static readonly DEFAULT_HEX_DEPTH = 30;
     static readonly DEFAULT_DEPTH_FILL_COLOR = "#161717ff";
     static readonly DEFAULT_DEPTH_STROKE_COLOR = Renderer.DEFAULT_DEPTH_FILL_COLOR;
-    //Here PLAYER_OFFSET_RATIO is a magic offset number to center vertically the player on the grid
-    static readonly #PLAYER_OFFSET_RATIO = 5 / 6;
+    //Here UNIT_OFFSET_RATIO is a magic offset number to center vertically the unit on the grid
+    static readonly #UNIT_OFFSET_RATIO = 5 / 6;
 
     static readonly PATH_WIDTH = 20;
 
-    constructor(layout: Layout) {
-        this.layout = layout;
+    constructor(grid: Grid, layout: Layout) {
+        this.#layout = layout;
+        this.#grid  = grid;
 
         this.gameCanvas = document.querySelector<HTMLCanvasElement>('#game-canvas')!;
         this.gameCtx = this.gameCanvas.getContext('2d')!;
@@ -56,7 +59,7 @@ export class Renderer {
         }
     }
 
-    clearGameCanvas(): void {
+    clear(): void {
         const ctx = this.gameCtx;
         const width = this.gameCanvas.width;
         const height = this.gameCanvas.height;
@@ -72,7 +75,7 @@ export class Renderer {
         this.gameCtx.drawImage(this.#mapCacheCanvas, 0, 0);
     }
 
-    drawMapCache(map: Map<string, Hex>): void {
+    drawMapCache(): void {
         const ctx = this.#mapCacheCtx;
         const dpr = window.devicePixelRatio;
 
@@ -83,12 +86,12 @@ export class Renderer {
         ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
 
         //Hex depth surface drawing
-        this.drawMapDepth(map);
+        this.drawMapDepth();
 
         //Hex Top surface drawing
         const outline = new Path2D();
-        for (const h of map.values()) {
-            const corners = this.layout.findCorners(h);
+        for (const h of this.#grid.getMap()) {
+            const corners = this.#layout.findCorners(h);
             ctx.beginPath();
             ctx.moveTo(corners[0].x, corners[0].y);
 
@@ -113,17 +116,17 @@ export class Renderer {
         ctx.stroke(outline);
 
         ctx.restore();
-    }
+      }
 
-    private drawMapDepth(map: Map<string, Hex>): void { 
+    private drawMapDepth(): void { 
         const ctx = this.#mapCacheCtx;
         //Here the outline has the same color has the inner shape (the hex) 
         //to compensate for the outline of the top surface (the grid) that makes each hex 0.5p bigger
         const depth = Renderer.DEFAULT_HEX_DEPTH;
         const outline = new Path2D();
         //Depth drawing
-        for (const h of map.values()) {
-            const corners = this.layout.findCorners(h);
+        for (const h of this.#grid.getMap()) {
+            const corners = this.#layout.findCorners(h);
 
             outline.moveTo(corners[1].x,corners[1].y);
             outline.lineTo(corners[1].x,corners[1].y + depth);
@@ -147,38 +150,39 @@ export class Renderer {
         ctx.stroke(outline);
     }
 
-    drawPlayer(player: Player): void {
+    drawUnit(unit: Unit): void {
         const ctx = this.gameCtx;
-        const sprite = player.getCurrentSprite();
+        const sprite = unit.getCurrentSprite();
         const width = sprite.naturalWidth;
         const height = sprite.naturalHeight;
         const dpr = window.devicePixelRatio;
+        const [unitX, unitY] = this.#layout.worldToScreen({x: unit.x, y: unit.y})
 
         ctx.save();
         ctx.scale(dpr, dpr);
-        ctx.translate(player.x, 0);
-        ctx.scale(player.direction, 1);
-        ctx.drawImage(sprite, -width / 2, player.y - Renderer.#PLAYER_OFFSET_RATIO * height);
+        ctx.translate(unitX, 0);
+        ctx.scale(unit.direction, 1);
+        ctx.drawImage(sprite, -width / 2, unitY - Renderer.#UNIT_OFFSET_RATIO * height);
 
         ctx.restore();
     }
 
-    drawPlayerAura(hex: Hex, isAlly: boolean, isCurrent: boolean) {
+    drawUnitAura(hex: Hex, isAlly: boolean, isCurrent: boolean) {
         const ctx = this.gameCtx;
         const dpr = window.devicePixelRatio;
 
         const paddingX = 7;
         const paddingY = 7;
-        const radiusX = this.layout.size.x;
-        const radiusY = this.layout.size.y;
+        const radiusX = this.#layout.getSizeX();
+        const radiusY = this.#layout.getSizeY();
         const scaleX = (radiusX - paddingX) / radiusX;
         const scaleY = (radiusY - paddingY) / radiusY;
         
         ctx.save();
         ctx.scale(dpr, dpr);
 
-        const [centerX, centerY] = this.layout.hexToPixel(hex);
-        const corners = this.layout.findCorners(hex);
+        const [centerX, centerY] = this.#layout.hexToScreen(hex);
+        const corners = this.#layout.findCorners(hex);
 
         ctx.beginPath();
 
@@ -220,7 +224,7 @@ export class Renderer {
         const linePath = new Path2D();
 
         for (let i = 0 ; i < path.length ; i++) {
-            const [x, y] = this.layout.hexToPixel(path[i]);
+            const [x, y] = this.#layout.hexToScreen(path[i]);
             if(i === 0) {
                 linePath.moveTo(x, y);
             }
@@ -245,10 +249,10 @@ export class Renderer {
         ctx.restore();
     }
 
-    drawButton(btn: UiButton): void {
+    drawButton(btn: UIButton): void {
         const ctx = this.uiCtx;
         
-        ctx.fillStyle = btn.isHovered ? "#555" : "#333";
+        ctx.fillStyle = btn.isHovered() ? "#555" : "#333";
         ctx.strokeStyle = Hex.DEFAULT_STROKE_COLOR;
         ctx.lineWidth = 2;
 

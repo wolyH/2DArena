@@ -1,151 +1,238 @@
 import { Renderer } from "./renderer.ts";
 import { Grid } from "./grid.ts";
-import { Player } from "./player.ts";
+import { Unit, UnitFactory } from "./unit.ts";
 import { Hex } from "./hex.ts";
 import type { Notifier } from "./utils.ts";
-import { Ui, UiButton } from "./ui.ts";
+import { UI, UIButton } from "./ui.ts";
+import { GameInputHandler, MenuInputHandler } from "./input.ts";
+import type { Layout } from "./layout.ts";
+
+type GameState = "START_SCREEN" | "PLAYING" | "GAME_OVER";
 
 export type GameEvent = {
     hex_clicked: (hex: Hex) => void;
-    button_clicked: (button: UiButton) => void;
+    button_clicked: (button: UIButton) => void;
     turn_skipped: () => void;
     shrink_map: () => void;
+    map_changed: () => void;
 };
 
-export type UiEvent = {
+export type UIEvent = {
     hex_hovered: (hex: Hex) => void;
-    button_hovered: (button: UiButton) => void;
+    hex_unhovered: () => void;
+    button_hovered: (button: UIButton) => void;
+    window_resized: (x: number , y:number) => void;
+    end_game: (message: string) => void;
+    start_game: () => void;
 };
+
+interface GameDependencies {
+    readonly grid: Grid;
+    readonly ui: UI;
+    readonly renderer: Renderer;
+    readonly layout: Layout;
+    readonly notifier: Notifier<GameEvent & UIEvent>;
+    readonly unitFactory: UnitFactory;
+    readonly inputHandlers: InputHandlers
+}
+
+interface InputHandlers {
+    readonly gameInputHandler: GameInputHandler;
+    readonly menuInputHandler: MenuInputHandler;
+}
 
 export class Game {
-    readonly #players: Array<Player>;
-    readonly #grid: Grid;
-    readonly #path: {goals: Array<Hex>, preview: {goals: Array<Hex>, isTraversable: boolean}};
-    readonly #ui: Ui;
-    readonly #renderer: Renderer;
-    readonly #notifier: Notifier<GameEvent & UiEvent>
-    readonly #camera = {direction: {up: false, down: false, left: false, right: false}, offset: {x:0, y:0}};
-        
-    #playerIdx: number;
-    #turn: number;
-    #lastPreviewHex?: string;
-    #mapChanged: boolean;
+    #deps: GameDependencies;
 
-    constructor(players: Array<Player>, grid: Grid, renderer: Renderer, notifier: Notifier<GameEvent & UiEvent>) {
-        this.#players = players,
-        this.#grid = grid,
-        this.#path = {goals: [], preview: {goals: [], isTraversable: false}};
-        this.#ui = new Ui(notifier);
-        this.#renderer = renderer;
-        this.#notifier = notifier;
-        this.#playerIdx = 0;
-        this.#turn = 1;
-        this.#mapChanged = true;
+    #state: GameState = "START_SCREEN";
+    #units: Array<Unit> = [];
+    #path: Array<Hex> = [];
+    #pathPreview: {goals: Array<Hex>, isTraversable: boolean} = {goals: [], isTraversable: false};  
+    #unitIdx: number = 0;
+    #turn: number = 1;
+    #mapChanged: boolean = true;
+
+    static readonly #CAMERA_SPEED = 10;
+
+    constructor(deps: GameDependencies) {
+        this.#deps = deps;
+        this.spawnUnits();
     }
 
     start(): void {
         this.setupEventListeners();
+        this.#deps.inputHandlers.menuInputHandler.setupEventListeners();
         this.loop();
     }
 
     //Main game loop
     private loop = (): void => {
-        this.update();
-        this.draw();
+        this.#deps.renderer.clear();
+        switch (this.#state) {
+            case "START_SCREEN":
+                this.drawUI();
+                break;
+            case "PLAYING":
+                this.update();
+                this.draw();
+                this.drawUI();
+                break;
+            case "GAME_OVER":
+                this.drawUI();
+                break;
+        }
         requestAnimationFrame(this.loop);
     }
 
     private setupEventListeners(): void {
-        this.#notifier.on("hex_clicked", (hex) => {
-            this.startPlayerAction(hex);
+        this.#deps.notifier.on("hex_clicked", (hex) => {
+            this.startUnitAction(hex);
         });
         
-        this.#notifier.on("hex_hovered", (hex) => {
-            this.showPathPreview(hex);
+        this.#deps.notifier.on("hex_hovered", (hex) => {
+            this.updatePathPreview(hex);
         });
 
-        this.#notifier.on("turn_skipped", () => {
-            this.#playerIdx = this.getNextAlivePlayer() ?? this.#playerIdx;
+        this.#deps.notifier.on("hex_unhovered", () => {
+           this.clearPathPreview();
+        });
+
+        this.#deps.notifier.on("turn_skipped", () => {
+            this.#unitIdx = this.getNextAliveUnit() ?? this.#unitIdx;
             this.#turn++;
         });
 
-        this.#notifier.on("button_hovered", (button) => {
-            button.isHovered = true;
+        this.#deps.notifier.on("button_hovered", (button) => {
+            button.hover();
+            this.clearPathPreview();
         });
 
-        this.#notifier.on("button_clicked", (button) => {
-            const currentPlayer = this.getCurrentPlayer();  
-            if (currentPlayer.isAlly && currentPlayer.is("Idle")) {
+        this.#deps.notifier.on("button_clicked", (button) => {
+            const currentUnit = this.getCurrentUnit();  
+            if (currentUnit.isAlly && currentUnit.is("Idle")) {
                 button.trigger();
             }
         });
 
-        this.#notifier.on("shrink_map", () => {
-            this.#grid.shrink();
-            this.killOORPlayers();
+        this.#deps.notifier.on("window_resized", (x, y) => {
+            this.#deps.renderer.resize();
+            this.#deps.layout.updateOrigin(x, y);
+            if(this.#state === "PLAYING") {
+                this.#mapChanged = true;
+            }
+        });
+
+        this.#deps.notifier.on("shrink_map", () => {
+            this.#deps.grid.shrink();
+            this.killOORunits();
             this.#mapChanged = true;
         });
 
-        window.addEventListener('resize', () => {
-            this.resize();
+        this.#deps.notifier.on("map_changed", () => {
             this.#mapChanged = true;
         });
-        window.addEventListener('click', (event) => this.handleMouseClick(event));
-        window.addEventListener('mousemove', (event) => this.handleMouseMove(event));
-        window.addEventListener('keydown', (event) => this.handleKeyDown(event));
-        window.addEventListener('keyup', (event) => this.handleKeyUp(event));
-        //window.addEventListener('error', (error) => {console.error(error.message, error.error);});
+
+        this.#deps.notifier.on("end_game", (message) => {
+            this.#state = "GAME_OVER";
+            this.#deps.inputHandlers.gameInputHandler.removeEventListeners();
+            this.#deps.inputHandlers.menuInputHandler.setupEventListeners();
+            this.#deps.ui.setupGameOverUI(message);
+            this.resetGame();
+        });
+
+        this.#deps.notifier.on("start_game", () => {
+            this.#state = "PLAYING";
+            this.#deps.inputHandlers.menuInputHandler.removeEventListeners();
+            this.#deps.inputHandlers.gameInputHandler.setupEventListeners();
+            this.#deps.ui.setupGameUI();
+        });
+    }
+
+    private spawnUnits(): void {
+        const hex1 = this.#deps.grid.getHex(Hex.hashCode(-(this.#deps.grid.n-1), 0))!;
+        const hex2 = this.#deps.grid.getHex(Hex.hashCode(this.#deps.grid.n-1, 0))!;
+        
+        const [x1, y1] = this.#deps.layout.hexToWorld(hex1);
+        const [x2, y2] = this.#deps.layout.hexToWorld(hex2);
+        
+        const unit1 = this.#deps.unitFactory.createAlly(hex1, x1, y1);
+        const unit2 = this.#deps.unitFactory.createEnemy(hex2, x2, y2);
+        this.#units = [unit1, unit2];
+    }
+
+    private resetGame(): void {
+        this.#turn = 1;
+        this.#unitIdx = 0;
+        this.#mapChanged = true;
+        this.#deps.layout.resetCameraOffset();
+        this.#deps.inputHandlers.gameInputHandler.resetCamera()
+        this.clearPathPreview();
+        this.#path = [];
+        this.#deps.grid.resetMap();
+        this.spawnUnits();
+    }
+
+    private clearPathPreview(): void {
+        this.#deps.inputHandlers.gameInputHandler.clearHoverState();
+        this.#pathPreview = {goals: [], isTraversable: false};
+    }
+
+    private drawUI(): void {
+        for(let i = 0 ; i< this.#deps.ui.buttons.length ; i++) {
+            this.#deps.renderer.drawButton(this.#deps.ui.buttons[i])
+        }
     }
 
     private draw(): void {
-        this.#renderer.clearGameCanvas();
-        
         if (this.#mapChanged) {
-            this.#renderer.drawMapCache(this.#grid.map);
+            this.#deps.renderer.drawMapCache();
             this.#mapChanged = false;
         }
 
-        this.#renderer.loadMap();
+        this.#deps.renderer.loadMap();
 
-        const currentPlayer = this.getCurrentPlayer(); 
+        const currentUnit = this.getCurrentUnit(); 
 
-        for (let i = 0; i < this.#players.length; i++) {
-            const player = this.#players[i]
-            if ((player.isDead) || player.is("Moving")) {
+        for (let i = 0; i < this.#units.length; i++) {
+            const unit = this.#units[i]
+            if ((unit.isDead) || unit.is("Moving")) {
                 continue;
             }
-            this.#renderer.drawPlayerAura(player.hex, player.isAlly, currentPlayer.hex.equals(player.hex));
+            this.#deps.renderer.drawUnitAura(unit.hex, unit.isAlly, currentUnit.hex.equals(unit.hex));
         }
 
-        this.#renderer.drawPathPreview(this.#path.preview);
+        this.#deps.renderer.drawPathPreview(this.#pathPreview);
 
-        for (let i = 0; i < this.#players.length; i++) {
-            if (this.#players[i].isDead && this.#players[i].deathAnimationOver) {
+        for (let i = 0; i < this.#units.length; i++) {
+            if (this.#units[i].isDead && this.#units[i].is("Idle")) {
                 continue;
             }
-            this.#renderer.drawPlayer(this.#players[i]);
+            this.#deps.renderer.drawUnit(this.#units[i]);
         }
-
-        this.#ui.buttons.forEach(btn => this.#renderer.drawButton(btn));
     }
 
     private update(): void {
         this.updateCamera();
+
         if(this.#turn % 5 === 0) {
-            this.#notifier.emit("shrink_map");
+            this.#deps.notifier.emit("shrink_map");
             this.#turn++
         }
 
-        for (let i = 0; i < this.#players.length; i++) {
-            this.updatePlayer(this.#players[i]);
+        for (let i = 0; i < this.#units.length; i++) {
+            this.updateUnit(this.#units[i]);
         }
 
         this.updateVisibility();
+
+        this.checkEndConditions();
     }
 
     private updateCamera(): void {
-        const cameraSpeed = 10 / window.devicePixelRatio;
-        const {up, down, left, right} = this.#camera.direction;
+        //take into account the level of zoom
+        const cameraSpeed = Game.#CAMERA_SPEED / window.devicePixelRatio;
+
+        const {up, down, left, right} = this.#deps.inputHandlers.gameInputHandler.camera.direction;
 
         const xorY = Number(up) - Number(down);
         const xorX = Number(left) - Number(right);
@@ -157,77 +244,94 @@ export class Game {
         //(length of the offset vector is always equals to cameraSpeed)
         const length = Math.sqrt(xorX * xorX + xorY * xorY);
         const offsetX = (xorX / length) * cameraSpeed;
-        const offsetY = (xorY / length) * cameraSpeed;  
+        const offsetY = (xorY / length) * cameraSpeed;
 
-        this.#camera.offset.x += offsetX;
-        this.#camera.offset.y += offsetY;
-
-        this.#renderer.layout.origin.x += offsetX;
-        this.#renderer.layout.origin.y += offsetY;
-        
-        for (let i = 0 ; i < this.#players.length ; i++) {
-            this.#players[i].x += offsetX;
-            this.#players[i].y += offsetY;
+        if (this.#deps.layout.updateCameraOffset(offsetX, offsetY)) {
+            this.#deps.notifier.emit("map_changed");
         }
-
-        this.#mapChanged = true;
     }
 
-    private updatePlayer(player: Player): void {
-        if(player.is("Dying") && player.deathAnimationOver) {
+    private checkEndConditions(): void {
+        const [allies, enemies] = this.getAliveUnits();
+
+        if (allies === 0) {
+            this.#deps.notifier.emit("end_game", "Defeat!");
+        } 
+        else if (enemies === 0) {
+            this.#deps.notifier.emit("end_game", "Victory!");
+        }
+    }
+
+    private getAliveUnits(): [number, number] {
+        let allies = 0;
+        let enemies = 0;
+        for (let i = 0; i < this.#units.length; i++) {
+            const unit = this.#units[i]
+            if (!(unit.isDead && unit.is("Idle")) && unit.isAlly) {
+                allies++;
+            }
+            if (!(unit.isDead && unit.is("Idle")) && !unit.isAlly) {
+               enemies++
+            }
+        }
+        return [allies, enemies];
+    }
+
+    private updateUnit(unit: Unit): void {   
+        if(unit.isDead && unit.is("Idle")) {
             return;
         }
-        if (player.is("Moving") && this.#path.goals.length === 0) {
-            player.idle();
+        if (unit.is("Moving") && this.#path.length === 0) {
+            unit.idle();
         }
-        if(player.is("Moving") && this.#path.goals.length > 0) {
-            this.movePlayerTowardGoal(player);
+        if(unit.is("Moving") && this.#path.length > 0) {
+            this.moveUnitTowardGoal(unit);
         }
 
-        player.updateVisual();
+        unit.updateVisual();
     }
 
-    private movePlayerTowardGoal(player: Player) {
-        const [goalX, goalY] = this.#renderer.layout.hexToPixel(this.#path.goals[0]);
-        const dx = goalX - player.x;
-        const dy = goalY - player.y;
+    private moveUnitTowardGoal(unit: Unit): void {
+        const [goalX, goalY] = this.#deps.layout.hexToWorld(this.#path[0]);
+        const dx = goalX - unit.x;
+        const dy = goalY - unit.y;  
 
-        this.updatePlayerDirection(player, dx);
+        this.updateUnitDirection(unit, dx);
 
         const distance = Math.sqrt(dx * dx + dy * dy);
-        //If the player is close enough to the goal
-        if (distance < player.speed) {
-            this.#path.goals.shift();
-            player.x = goalX;
-            player.y = goalY;
+        //If the unit is close enough to the goal
+        if (distance < unit.speed) {
+            this.#path.shift();
+            unit.x = goalX;
+            unit.y = goalY;
         }
         else {
             //Normalize so when we move diagonaly it is not faster 
             //(length of the delta vector is always equals to speed)
-            player.x += (dx / distance) * player.speed;
-            player.y += (dy / distance) * player.speed;
+            unit.x += (dx / distance) * unit.speed;
+            unit.y += (dy / distance) * unit.speed;
         }
-        this.UpdatePlayerHex(player);
+        this.updateUnitHex(unit);
     }
 
-    private updatePlayerDirection(player: Player, dx: number): void {
+    private updateUnitDirection(unit: Unit, dx: number): void {
         if (dx > 0) {
-            player.turnRight();
+            unit.turnRight();
         }
         else if (dx < 0) {
-            player.turnLeft();
+            unit.turnLeft();
         }
     }
 
-    private UpdatePlayerHex(player: Player): void {
-        const [q,r,_] = this.#renderer.layout.pixelToHex({x: player.x, y: player.y});
-        const AdjacentHex = this.#grid.map.get(Hex.hashCode(q, r));
+    private updateUnitHex(unit: Unit): void {
+        const [q,r,_] = this.#deps.layout.worldToHex({x: unit.x, y: unit.y});
+        const AdjacentHex = this.#deps.grid.getHex(Hex.hashCode(q, r));
 
         if (!AdjacentHex) {
-            throw new Error("player not on grid");
+            throw new Error("unit not on grid");
         }
-        if (!player.hex.equals(AdjacentHex)) {
-            player.setHex(AdjacentHex);
+        if (!unit.hex.equals(AdjacentHex)) {
+            unit.setHex(AdjacentHex);
         }
     }
     
@@ -235,16 +339,16 @@ export class Game {
         const fov: Set<string> = new Set();
         let fovChanged = false
 
-        for (let i = 0; i < this.#players.length; i++) {
-            if (this.#players[i].isDead) {
+        for (let i = 0; i < this.#units.length; i++) {
+            if (this.#units[i].isDead) {
                 continue;
             }
-            for (const h of this.#grid.getFov(this.#players[i].hex)) {
+            for (const h of this.#deps.grid.getFov(this.#units[i].hex)) {
                 fov.add(h);
             }
         }
         
-        for (const hex of this.#grid.map.values()) {
+        for (const hex of this.#deps.grid.getMap().values()) {
             if(fov.has(hex.hashCode)) {
                 if (!hex.isVisible) {
                     fovChanged = true;
@@ -264,206 +368,87 @@ export class Game {
         }
     }
 
-    private getNextAlivePlayer(): number | undefined {
-        for (let i = 1 ; i < this.#players.length ; i++) {
-            const nextTurn = (this.#playerIdx + i) % this.#players.length;
+    private getNextAliveUnit(): number | undefined {
+        for (let i = 1 ; i < this.#units.length ; i++) {
+            const nextTurn = (this.#unitIdx + i) % this.#units.length;
 
-            if (!this.#players[nextTurn].isDead) {
+            if (!this.#units[nextTurn].isDead) {
                 return nextTurn;
             }
         }
         return undefined;
     }
 
-    //Kill players that are out of the map (eg. after shrinking)
-    private killOORPlayers() {
-        for (let i = 0 ; i < this.#players.length ; i++) {
-            if (!this.#players[i].isDead && !this.#grid.map.has(this.#players[i].hex.hashCode)) {
-                this.#players[i].die();
+    //Kill units that are out of the map (eg. after shrinking)
+    private killOORunits(): void {
+        for (let i = 0 ; i < this.#units.length ; i++) {
+            if (!this.#units[i].isDead && !this.#deps.grid.hasHex(this.#units[i].hex.hashCode)) {
+                this.#units[i].die();
             }
         }
-        this.updateCurrentPlayer();
+        this.updateCurrentUnit();
     }
 
-    private getCurrentPlayer(): Player {
-        return this.#players[this.#playerIdx];
+    private getCurrentUnit(): Unit {
+        return this.#units[this.#unitIdx];
     }
 
-    private updateCurrentPlayer(): void {
-            if (this.#players[this.#playerIdx].isDead) {
-            this.#notifier.emit("turn_skipped");
+    private updateCurrentUnit(): void {
+        if (this.#units[this.#unitIdx].isDead) {
+            this.#deps.notifier.emit("turn_skipped");
         }
     }
 
-    private handleMouseMove(event: MouseEvent): void {
-        const button = this.getButtonFromEvent(event);
-        
-        if (button) {
-            this.#notifier.emit("button_hovered", button);
+    private startUnitAction(hex: Hex): void {
+        const currentUnit = this.getCurrentUnit();  
+
+        if (!this.canUnitActOnHex(currentUnit, hex)) {
             return;
         }
 
-        const hex = this.getHexFromEvent(event);
-        if (!hex) {
-            this.clearPathPreview();
-            return;
-        }
-
-        if (this.#lastPreviewHex === hex.hashCode) {
-            return;
-        }
-
-        this.#lastPreviewHex = hex.hashCode;
-        this.#notifier.emit("hex_hovered", hex);
-    }
-
-    private handleMouseClick(event: MouseEvent): void {
-        const button = this.getButtonFromEvent(event)
-        if (button) {
-            this.#notifier.emit("button_clicked", button);
-            return;
-        }
-
-        const hex = this.getHexFromEvent(event);
-        if (hex && hex.isVisible) {
-            this.#notifier.emit("hex_clicked", hex);
-        }
-    }
-
-    private getHexFromEvent(event: MouseEvent): Hex | undefined {
-        const rect = this.#renderer.gameCanvas.getBoundingClientRect();
-
-        const [q,r,_] = this.#renderer.layout.pixelToHex({
-                x: event.clientX - rect.left, 
-                y: event.clientY - rect.top
-            });
-
-        return this.#grid.map.get(Hex.hashCode(q,r));
-    }
-
-    private getButtonFromEvent(event: MouseEvent): UiButton | undefined {
-        let hoveredButton = undefined;
-
-        const rect = this.#renderer.gameCanvas.getBoundingClientRect();
-
-        const x = (event.clientX - rect.left) * window.devicePixelRatio;
-        const y = (event.clientY - rect.top) * window.devicePixelRatio;
-
-        for(const button of this.#ui.buttons) {
-            if (button.isHit(x, y)) {
-                hoveredButton = button;
-            }
-            button.isHovered = false;
-        }
-        return hoveredButton;
-    }
-
-    private startPlayerAction(hex: Hex): void {
-        const currentPlayer = this.getCurrentPlayer();  
-
-        if (!this.canPlayerActOnHex(currentPlayer, hex)) {
-            return;
-        }
-
-        if (hex.isNeighbor(currentPlayer.hex) && (hex.player && !hex.player.isAlly)) {
-            currentPlayer.strike();
-            hex.player.die();
+        if (hex.isNeighbor(currentUnit.hex) && (hex.unit && !hex.unit.isAlly)) {
+            const dx = hex.unit.x - currentUnit.x;
+            this.updateUnitDirection(currentUnit, dx);
+            currentUnit.strike();
+            hex.unit.die();
             return;
         }
         
-        const goals = this.#grid.searchPath(currentPlayer.hex, hex);
-        if (goals.length > 1) {
-            this.#path.goals = goals;
-            currentPlayer.move();
+        const path = this.#deps.grid.searchPath(currentUnit.hex, hex);
+        if (path.length > 1) {
+            this.#path = path;
+            currentUnit.move();
             this.clearPathPreview();
         }
     }
 
-    private showPathPreview(hex: Hex): void {
+    private updatePathPreview(hex: Hex): void {
+        const currentUnit = this.getCurrentUnit();
         this.clearPathPreview();
-        const currentPlayer = this.getCurrentPlayer();
 
-        if (!this.canPlayerActOnHex(currentPlayer, hex)) {
+        if (!this.canUnitActOnHex(currentUnit, hex)) {
             return;
         }
 
-        const traversableGoals = this.#grid.searchPath(currentPlayer.hex, hex);
+        const traversableGoals = this.#deps.grid.searchPath(currentUnit.hex, hex);
         if (traversableGoals.length > 1) {
-            this.#path.preview = {goals: traversableGoals, isTraversable: true};
+            this.#pathPreview = {goals: traversableGoals, isTraversable: true};
             return;
         }
 
-        const nonTraversableGoals = this.#grid.searchPath(currentPlayer.hex, hex, false);
+        const nonTraversableGoals = this.#deps.grid.searchPath(currentUnit.hex, hex, false);
         if (nonTraversableGoals.length > 1) {
-            this.#path.preview = {goals: nonTraversableGoals, isTraversable: false};
+            this.#pathPreview = {goals: nonTraversableGoals, isTraversable: false};
         }
     }
 
-    private clearPathPreview(): void {
-        this.#lastPreviewHex = undefined;
-        this.#path.preview = { goals: [], isTraversable: false };
-    }
-
-    private canPlayerActOnHex(player: Player, hex: Hex): boolean {
-        if (!player.is("Idle") || !player.isAlly) {
+    private canUnitActOnHex(unit: Unit, hex: Hex): boolean {
+        if (!unit.is("Idle") || !unit.isAlly) {
             return false;
         }
-        if ((hex.player && hex.player.isAlly) || hex.isObstacle) {
+        if ((hex.unit && hex.unit.isAlly) || hex.isObstacle) {
             return false;
         }
         return true;
-    }
-
-    private handleKeyDown(event: KeyboardEvent): void {
-        const key = event.key.toLowerCase();
-        
-        if (key === 'w') {
-            this.#camera.direction.up = true;
-        }
-        if (key === 's') {
-            this.#camera.direction.down = true;
-        }
-        if (key === 'a') {
-            this.#camera.direction.left = true;
-        }
-        if (key === 'd') {
-            this.#camera.direction.right = true;
-        }
-    }
-
-    private handleKeyUp(event: KeyboardEvent): void {
-        const key = event.key.toLowerCase();
-        
-        if (key === 'w') {
-            this.#camera.direction.up = false;
-        }
-        if (key === 's') {
-            this.#camera.direction.down = false;
-        }
-        if (key === 'a') {
-            this.#camera.direction.left = false;
-        }
-        if (key === 'd') {
-            this.#camera.direction.right = false;
-        }
-    }
-
-    private resize(): void {
-        this.#renderer.resize();
-
-        const width = window.innerWidth;
-        const height = window.innerHeight;
-
-        //Using the diff between the old/new origin of the canvas 
-        //to calculate the new position of the players on the screen
-        const newOriginX = width / 2 + this.#camera.offset.x;
-        const newOriginY = height / 2 + this.#camera.offset.y;
-
-        for (let i = 0 ; i < this.#players.length ; i++) {
-            this.#players[i].x += newOriginX - this.#renderer.layout.origin.x;
-            this.#players[i].y += newOriginY - this.#renderer.layout.origin.y;
-        } 
-
-        this.#renderer.layout.origin = {x: newOriginX, y: newOriginY};
     }
 }
