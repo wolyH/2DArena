@@ -12,11 +12,11 @@ export class UnitFactory {
         this.#assetmanager = assetmanager;
     }
 
-    createAlly(hex: Hex, x: number, y: number, speed: number = 1): Unit {
+    createAlly(hex: Hex, x: number, y: number, speed: number = 200): Unit {
         return this.createUnit(hex, x, y, speed, true, "black");
     }
 
-    createEnemy(hex: Hex, x: number, y: number, speed: number = 1): Unit {
+    createEnemy(hex: Hex, x: number, y: number, speed: number = 200): Unit {
         return this.createUnit(hex, x, y, speed, false, "black");
     }
 
@@ -64,7 +64,7 @@ export class Unit {
         x: number,
         y: number,
         sprites: Record<UnitAction, Array<HTMLImageElement>>,
-        speed: number = 1,
+        speed: number,
         isAlly: boolean
     ) {
         this.#hex = hex;
@@ -100,8 +100,8 @@ export class Unit {
         return this.#isDead;
     }
 
-    updateVisual(): void {
-        this.#frameCounter++
+    update(): void {
+        this.#frameCounter++;
 
         if (this.#frameCounter >= Unit.#ANIMATION_SPEED) {
             this.#frameCounter = 0;

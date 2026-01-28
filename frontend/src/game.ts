@@ -3,37 +3,73 @@ import { Grid } from "./grid.ts";
 import { Unit, UnitFactory } from "./unit.ts";
 import { Hex } from "./hex.ts";
 import type { Notifier } from "./utils.ts";
-import { UI, UIButton } from "./ui.ts";
-import { GameInputHandler, MenuInputHandler } from "./input.ts";
+import { UiButton } from "./ui/UiButton.ts";
+import { GameInputHandler } from './inputs/GameInputHandler.ts';
+import { MenuInputHandler } from './inputs/MenuInputHandler.ts';
 import type { Layout } from "./layout.ts";
+import type { UiManager } from "./ui/UiManager.ts";
+import type { AuthHandler } from "./handlers/AuthHandler.ts";
+import type { RoomHandler } from "./handlers/RoomHandler.ts";
+import type { RoomResponse } from "./dto/RoomResponse.ts";
 
-type GameState = "START_SCREEN" | "PLAYING" | "GAME_OVER";
+export type AllEvents = GameEvent & InputEvent & MenuEvent & ServerUpdateEvent;
 
-export type GameEvent = {
-    hex_clicked: (hex: Hex) => void;
-    button_clicked: (button: UIButton) => void;
-    turn_skipped: () => void;
-    shrink_map: () => void;
-    map_changed: () => void;
+export type ServerUpdateEvent = {
+    server_update: (body: any) => void;
+
+    player_joined_room: (username: string) => void;
+    player_left_room: () => void;
 };
 
-export type UIEvent = {
+export type InputEvent = {
+    hex_clicked: (hex: Hex) => void;
     hex_hovered: (hex: Hex) => void;
     hex_unhovered: () => void;
-    button_hovered: (button: UIButton) => void;
-    window_resized: (x: number , y:number) => void;
-    end_game: (message: string) => void;
-    start_game: () => void;
+    button_clicked: (button: UiButton) => void;
+    button_hovered: (button: UiButton) => void;
+
+    camera_key_changed: (direction: 'up' | 'down' | 'left' | 'right', isPressed: boolean) => void;
+
+    window_resized: (x: number , y: number) => void;
+};
+
+export type GameEvent = {
+    skip_turn_requested: () => void;
+};
+
+export type MenuEvent = {
+    login_requested: (username: string) => void;
+    login_completed: (username: string, token: string) => void;
+    connected: () => void;
+
+    create_room_requested: () => void;
+    room_created: (roomId: string) => void;
+
+    browse_rooms_requested: () => void;
+    rooms_list_received: (rooms: Array<RoomResponse>) => void;
+    refresh_rooms_requested: () => void;
+    cancel_browsing: () => void;
+
+    join_room_requested: (roomId: string) => void;
+    room_joined: (roomId: string, opponent: string) => void;
+
+    leave_room_requested: () => void;
+    room_left: () => void;
+
+    start_game_requested: () => void;
+    game_started: (username: string) => void;
 };
 
 interface GameDependencies {
     readonly grid: Grid;
-    readonly ui: UI;
+    readonly uiManager: UiManager;
     readonly renderer: Renderer;
     readonly layout: Layout;
-    readonly notifier: Notifier<GameEvent & UIEvent>;
+    readonly notifier: Notifier<AllEvents>;
     readonly unitFactory: UnitFactory;
-    readonly inputHandlers: InputHandlers
+    readonly inputHandlers: InputHandlers;
+    readonly authHandler: AuthHandler;
+    readonly roomHandler: RoomHandler
 }
 
 interface InputHandlers {
@@ -44,15 +80,23 @@ interface InputHandlers {
 export class Game {
     #deps: GameDependencies;
 
-    #state: GameState = "START_SCREEN";
+    #username: string | undefined = undefined;
+    #room : {roomId: string | undefined, opponent: string | undefined} = {roomId: undefined, opponent: undefined};
+    #serverUpdateQueue: Array<any> = [];
+
+    #camera = {up: false, down: false, left: false, right: false};
     #units: Array<Unit> = [];
     #path: Array<Hex> = [];
-    #pathPreview: {goals: Array<Hex>, isTraversable: boolean} = {goals: [], isTraversable: false};  
+    #pathPreview: {goals: Array<Hex>, isTraversable: boolean} = {goals: [], isTraversable: false};
+    #fovSet: Set<string> = new Set();
     #unitIdx: number = 0;
-    #turn: number = 1;
-    #mapChanged: boolean = true;
 
-    static readonly #CAMERA_SPEED = 10;
+    #mapInvalidated: boolean = true;
+    #fovInvalidated: boolean = true;
+
+    #lastTime: number = 0;
+
+    static readonly #CAMERA_SPEED = 1000;
 
     constructor(deps: GameDependencies) {
         this.#deps = deps;
@@ -60,31 +104,52 @@ export class Game {
     }
 
     start(): void {
-        this.setupEventListeners();
+        this.setupServerUpdateEventListenners();
+        this.setupInputEventListenners();
+        this.setupGameEventListenners();
+        this.setupMenuEventListenners();
         this.#deps.inputHandlers.menuInputHandler.setupEventListeners();
         this.loop();
     }
 
     //Main game loop
-    private loop = (): void => {
+    private loop = (currentTime: number = 0): void => {
+        const delta = (currentTime - this.#lastTime) / 1000;
+        this.#lastTime = currentTime;
+
         this.#deps.renderer.clear();
-        switch (this.#state) {
-            case "START_SCREEN":
-                this.drawUI();
+        switch (this.#deps.uiManager.state) {
+            case "MENU":
+                this.updateMenu();
+                this.drawUi();
                 break;
-            case "PLAYING":
-                this.update();
-                this.draw();
-                this.drawUI();
-                break;
-            case "GAME_OVER":
-                this.drawUI();
+            case "GAME":
+                this.updateGame(delta);
+                this.drawGame();
+                this.drawUi();
                 break;
         }
         requestAnimationFrame(this.loop);
     }
 
-    private setupEventListeners(): void {
+    private setupServerUpdateEventListenners(): void {
+        this.#deps.notifier.on("server_update", (body) => {
+            console.log("received update from server");
+            this.#serverUpdateQueue.push(body);
+        });
+
+        this.#deps.notifier.on("player_joined_room", (username) => {
+            this.#room.opponent = username;
+            this.#deps.uiManager.showRoom(true, this.#username!, this.#room.opponent);
+        });
+
+        this.#deps.notifier.on("player_left_room", () => {
+            this.#room.opponent = undefined;
+            this.#deps.uiManager.showRoom(true, this.#username!, undefined);
+        });
+    }
+
+    private setupInputEventListenners(): void {
         this.#deps.notifier.on("hex_clicked", (hex) => {
             this.startUnitAction(hex);
         });
@@ -95,11 +160,6 @@ export class Game {
 
         this.#deps.notifier.on("hex_unhovered", () => {
            this.clearPathPreview();
-        });
-
-        this.#deps.notifier.on("turn_skipped", () => {
-            this.#unitIdx = this.getNextAliveUnit() ?? this.#unitIdx;
-            this.#turn++;
         });
 
         this.#deps.notifier.on("button_hovered", (button) => {
@@ -114,37 +174,90 @@ export class Game {
             }
         });
 
-        this.#deps.notifier.on("window_resized", (x, y) => {
-            this.#deps.renderer.resize();
-            this.#deps.layout.updateOrigin(x, y);
-            if(this.#state === "PLAYING") {
-                this.#mapChanged = true;
+        this.#deps.notifier.on("camera_key_changed", (direction, isPressed) => { 
+            if (direction in this.#camera) {
+                this.#camera[direction] = isPressed;
             }
         });
 
-        this.#deps.notifier.on("shrink_map", () => {
-            this.#deps.grid.shrink();
-            this.killOORunits();
-            this.#mapChanged = true;
+        this.#deps.notifier.on("window_resized", (x, y) => {
+            this.#deps.renderer.resize();
+            this.#deps.layout.updateOrigin(x, y);
+            if(this.#deps.uiManager.state === "GAME") {
+                this.#mapInvalidated = true;
+            }
+        });
+    }
+
+    private setupGameEventListenners(): void {}
+
+    private setupMenuEventListenners(): void {
+        this.#deps.notifier.on("login_requested", (username) => {
+            this.#deps.authHandler.login(username);
         });
 
-        this.#deps.notifier.on("map_changed", () => {
-            this.#mapChanged = true;
+        this.#deps.notifier.on("login_completed", (username, token) => {
+            this.#username = username;
+            this.#deps.roomHandler.setClient(token);
         });
 
-        this.#deps.notifier.on("end_game", (message) => {
-            this.#state = "GAME_OVER";
-            this.#deps.inputHandlers.gameInputHandler.removeEventListeners();
-            this.#deps.inputHandlers.menuInputHandler.setupEventListeners();
-            this.#deps.ui.setupGameOverUI(message);
-            this.resetGame();
+        this.#deps.notifier.on("connected", () => {
+            this.#deps.uiManager.showStart();
+        })
+
+        this.#deps.notifier.on("create_room_requested", () => {
+            this.#deps.roomHandler.createRoom();
         });
 
-        this.#deps.notifier.on("start_game", () => {
-            this.#state = "PLAYING";
+        this.#deps.notifier.on("room_created", (roomId) => {
+            this.#room.roomId = roomId;
+            this.#deps.uiManager.showRoom(true, this.#username!, undefined);
+        });
+
+        this.#deps.notifier.on("browse_rooms_requested", () => {
+            this.#deps.roomHandler.startBrowsing();
+        });
+
+        this.#deps.notifier.on("rooms_list_received", (rooms) => {
+            this.#deps.uiManager.showBrowser(rooms);
+        });
+
+        this.#deps.notifier.on("refresh_rooms_requested", () => {
+            this.#deps.roomHandler.startBrowsing();
+        });
+
+        this.#deps.notifier.on("cancel_browsing", () => {
+            this.#deps.uiManager.showStart();
+        });
+
+        this.#deps.notifier.on("join_room_requested", (roomId) => {
+            this.#deps.roomHandler.joinRoom(roomId);
+        });
+
+        this.#deps.notifier.on("room_joined", (roomId, opponent) => {
+            this.#room.roomId = roomId;
+            this.#room.opponent = opponent;
+            this.#deps.uiManager.showRoom(false, this.#username!, opponent);
+        });
+
+        this.#deps.notifier.on("leave_room_requested", () => {
+            this.#deps.roomHandler.leaveRoom(this.#room.roomId!);
+        });
+
+        this.#deps.notifier.on("room_left", () => {
+            this.#room.roomId = undefined;
+            this.#room.opponent = undefined;
+            this.#deps.uiManager.showStart();
+        });
+
+        this.#deps.notifier.on("start_game_requested", () => {
+            this.#deps.roomHandler.startGame(this.#room.roomId!);
+        });
+
+        this.#deps.notifier.on("game_started", (username) => {
             this.#deps.inputHandlers.menuInputHandler.removeEventListeners();
             this.#deps.inputHandlers.gameInputHandler.setupEventListeners();
-            this.#deps.ui.setupGameUI();
+            this.#deps.uiManager.showGame();
         });
     }
 
@@ -161,15 +274,21 @@ export class Game {
     }
 
     private resetGame(): void {
-        this.#turn = 1;
         this.#unitIdx = 0;
-        this.#mapChanged = true;
+        this.#mapInvalidated = true;
         this.#deps.layout.resetCameraOffset();
-        this.#deps.inputHandlers.gameInputHandler.resetCamera()
+        this.resetCamera()
         this.clearPathPreview();
         this.#path = [];
         this.#deps.grid.resetMap();
         this.spawnUnits();
+    }
+
+    private resetCamera(): void {
+        this.#camera.up = false;
+        this.#camera.down = false;
+        this.#camera.left = false;
+        this.#camera.right = false;
     }
 
     private clearPathPreview(): void {
@@ -177,62 +296,59 @@ export class Game {
         this.#pathPreview = {goals: [], isTraversable: false};
     }
 
-    private drawUI(): void {
-        for(let i = 0 ; i< this.#deps.ui.buttons.length ; i++) {
-            this.#deps.renderer.drawButton(this.#deps.ui.buttons[i])
+    private updateMenu(): void {
+        if(this.#serverUpdateQueue.length > 0) {
+            const update = this.#serverUpdateQueue.shift();
+            this.processServerUpdate(update);
         }
     }
 
-    private draw(): void {
-        if (this.#mapChanged) {
-            this.#deps.renderer.drawMapCache();
-            this.#mapChanged = false;
+    private processServerUpdate(update: any): void {
+        if (!update.type) {
+            throw new Error("client receivend a server update with no type");
         }
-
-        this.#deps.renderer.loadMap();
-
-        const currentUnit = this.getCurrentUnit(); 
-
-        for (let i = 0; i < this.#units.length; i++) {
-            const unit = this.#units[i]
-            if ((unit.isDead) || unit.is("Moving")) {
-                continue;
-            }
-            this.#deps.renderer.drawUnitAura(unit.hex, unit.isAlly, currentUnit.hex.equals(unit.hex));
-        }
-
-        this.#deps.renderer.drawPathPreview(this.#pathPreview);
-
-        for (let i = 0; i < this.#units.length; i++) {
-            if (this.#units[i].isDead && this.#units[i].is("Idle")) {
-                continue;
-            }
-            this.#deps.renderer.drawUnit(this.#units[i]);
+        
+        switch (update.type) {
+            case "PLAYER_JOINED":
+                if(update.data.roomId === this.#room.roomId) {
+                    this.#deps.notifier.emit("player_joined_room", update.data.username);
+                }
+                break;
+            case "ROOM_DELETED":
+                if (update.data.roomId === this.#room.roomId){
+                    this.#deps.notifier.emit("room_left");
+                }
+                break;
+            case "PLAYER_LEFT":
+                if (update.data.roomId === this.#room.roomId && update.data.username === this.#room.opponent) {
+                    this.#deps.notifier.emit("player_left_room")
+                }
+                break; 
+            case "GAME_STARTED":
+                if(update.data.turn) {
+                   this.#deps.notifier.emit("game_started", update.data.turn);
+                }
+                break;
         }
     }
 
-    private update(): void {
-        this.updateCamera();
-
-        if(this.#turn % 5 === 0) {
-            this.#deps.notifier.emit("shrink_map");
-            this.#turn++
-        }
+    private updateGame(delta: number): void {
+        this.updateCamera(delta);
 
         for (let i = 0; i < this.#units.length; i++) {
-            this.updateUnit(this.#units[i]);
+            this.updateUnit(this.#units[i], delta);
         }
-
-        this.updateVisibility();
-
-        this.checkEndConditions();
+        if (this.#fovInvalidated) {
+            this.updateVisibility();
+            this.#fovInvalidated = false;
+        }
     }
 
-    private updateCamera(): void {
+    private updateCamera(delta: number): void {
         //take into account the level of zoom
-        const cameraSpeed = Game.#CAMERA_SPEED / window.devicePixelRatio;
+        const cameraSpeed = (Game.#CAMERA_SPEED / window.devicePixelRatio) * delta;
 
-        const {up, down, left, right} = this.#deps.inputHandlers.gameInputHandler.camera.direction;
+        const {up, down, left, right} = this.#camera;
 
         const xorY = Number(up) - Number(down);
         const xorX = Number(left) - Number(right);
@@ -247,37 +363,11 @@ export class Game {
         const offsetY = (xorY / length) * cameraSpeed;
 
         if (this.#deps.layout.updateCameraOffset(offsetX, offsetY)) {
-            this.#deps.notifier.emit("map_changed");
+            this.#mapInvalidated = true
         }
     }
 
-    private checkEndConditions(): void {
-        const [allies, enemies] = this.getAliveUnits();
-
-        if (allies === 0) {
-            this.#deps.notifier.emit("end_game", "Defeat!");
-        } 
-        else if (enemies === 0) {
-            this.#deps.notifier.emit("end_game", "Victory!");
-        }
-    }
-
-    private getAliveUnits(): [number, number] {
-        let allies = 0;
-        let enemies = 0;
-        for (let i = 0; i < this.#units.length; i++) {
-            const unit = this.#units[i]
-            if (!(unit.isDead && unit.is("Idle")) && unit.isAlly) {
-                allies++;
-            }
-            if (!(unit.isDead && unit.is("Idle")) && !unit.isAlly) {
-               enemies++
-            }
-        }
-        return [allies, enemies];
-    }
-
-    private updateUnit(unit: Unit): void {   
+    private updateUnit(unit: Unit, delta: number): void {   
         if(unit.isDead && unit.is("Idle")) {
             return;
         }
@@ -285,13 +375,13 @@ export class Game {
             unit.idle();
         }
         if(unit.is("Moving") && this.#path.length > 0) {
-            this.moveUnitTowardGoal(unit);
+            this.moveUnitTowardGoal(unit, delta);
         }
 
-        unit.updateVisual();
+        unit.update();
     }
 
-    private moveUnitTowardGoal(unit: Unit): void {
+    private moveUnitTowardGoal(unit: Unit, delta: number): void {
         const [goalX, goalY] = this.#deps.layout.hexToWorld(this.#path[0]);
         const dx = goalX - unit.x;
         const dy = goalY - unit.y;  
@@ -299,17 +389,15 @@ export class Game {
         this.updateUnitDirection(unit, dx);
 
         const distance = Math.sqrt(dx * dx + dy * dy);
-        //If the unit is close enough to the goal
-        if (distance < unit.speed) {
+
+        if (distance < unit.speed * delta) {
             this.#path.shift();
             unit.x = goalX;
             unit.y = goalY;
         }
         else {
-            //Normalize so when we move diagonaly it is not faster 
-            //(length of the delta vector is always equals to speed)
-            unit.x += (dx / distance) * unit.speed;
-            unit.y += (dy / distance) * unit.speed;
+            unit.x += (dx / distance) * unit.speed * delta;
+            unit.y += (dy / distance) * unit.speed * delta;
         }
         this.updateUnitHex(unit);
     }
@@ -331,12 +419,13 @@ export class Game {
             throw new Error("unit not on grid");
         }
         if (!unit.hex.equals(AdjacentHex)) {
+            this.#fovInvalidated  = true;
             unit.setHex(AdjacentHex);
         }
     }
     
     private updateVisibility(): void {
-        const fov: Set<string> = new Set();
+        this.#fovSet.clear();
         let fovChanged = false
 
         for (let i = 0; i < this.#units.length; i++) {
@@ -344,12 +433,12 @@ export class Game {
                 continue;
             }
             for (const h of this.#deps.grid.getFov(this.#units[i].hex)) {
-                fov.add(h);
+                this.#fovSet.add(h);
             }
         }
         
         for (const hex of this.#deps.grid.getMap().values()) {
-            if(fov.has(hex.hashCode)) {
+            if(this.#fovSet.has(hex.hashCode)) {
                 if (!hex.isVisible) {
                     fovChanged = true;
                 }
@@ -364,39 +453,12 @@ export class Game {
         }
 
         if (fovChanged) {
-            this.#mapChanged = true;
+            this.#mapInvalidated = true;
         }
-    }
-
-    private getNextAliveUnit(): number | undefined {
-        for (let i = 1 ; i < this.#units.length ; i++) {
-            const nextTurn = (this.#unitIdx + i) % this.#units.length;
-
-            if (!this.#units[nextTurn].isDead) {
-                return nextTurn;
-            }
-        }
-        return undefined;
-    }
-
-    //Kill units that are out of the map (eg. after shrinking)
-    private killOORunits(): void {
-        for (let i = 0 ; i < this.#units.length ; i++) {
-            if (!this.#units[i].isDead && !this.#deps.grid.hasHex(this.#units[i].hex.hashCode)) {
-                this.#units[i].die();
-            }
-        }
-        this.updateCurrentUnit();
     }
 
     private getCurrentUnit(): Unit {
         return this.#units[this.#unitIdx];
-    }
-
-    private updateCurrentUnit(): void {
-        if (this.#units[this.#unitIdx].isDead) {
-            this.#deps.notifier.emit("turn_skipped");
-        }
     }
 
     private startUnitAction(hex: Hex): void {
@@ -450,5 +512,37 @@ export class Game {
             return false;
         }
         return true;
+    }
+
+    private drawUi(): void {
+        for(let i = 0 ; i< this.#deps.uiManager.buttons.length ; i++) {
+            this.#deps.renderer.drawButton(this.#deps.uiManager.buttons[i])
+        }
+        for(let i = 0 ; i< this.#deps.uiManager.texts.length ; i++) {
+            this.#deps.renderer.drawText(this.#deps.uiManager.texts[i])
+        }
+    }
+
+    private drawGame(): void {
+        if (this.#mapInvalidated) {
+            this.#deps.renderer.drawMapCache();
+            this.#mapInvalidated = false;
+        }
+
+        this.#deps.renderer.loadMap();
+
+        const currentUnit = this.getCurrentUnit(); 
+
+        this.#deps.renderer.drawPathPreview(this.#pathPreview);
+
+        for (let i = 0; i < this.#units.length; i++) {
+            const unit = this.#units[i]
+            if (!((unit.isDead) || unit.is("Moving"))) {
+                this.#deps.renderer.drawUnitAura(unit.hex, unit.isAlly, currentUnit.hex.equals(unit.hex));
+            }
+            if (!(unit.isDead && unit.is("Idle"))) {
+                this.#deps.renderer.drawUnit(unit);
+            }
+        }
     }
 }

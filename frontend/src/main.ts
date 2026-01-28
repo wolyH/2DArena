@@ -1,14 +1,16 @@
-import './style.css'
-import { Game } from './game.ts';
+import './style.css';
+import { Game, type AllEvents } from './game.ts';
 import { Renderer } from './renderer.ts';
 import { Layout } from './layout.ts';
 import { AssetManager } from './utils.ts';
 import { Grid } from './grid.ts';
 import { createNotifier } from './utils.ts';
-import type { GameEvent, UIEvent } from './game.ts';
-import { UI } from './ui.ts';
-import { GameInputHandler, MenuInputHandler } from './input.ts';
+import { GameInputHandler } from './inputs/GameInputHandler.ts';
+import { MenuInputHandler } from './inputs/MenuInputHandler.ts';
 import { UnitFactory } from './unit.ts';
+import { UiManager } from './ui/UiManager.ts';
+import { AuthHandler } from './handlers/AuthHandler.ts';
+import { RoomHandler } from './handlers/RoomHandler.ts';
 
 const assetManager = new AssetManager();
 
@@ -37,24 +39,28 @@ const layout = new Layout(origin, {x: 100, y: 50}, n);
 const grid = new Grid(n);
 const renderer = new Renderer(grid, layout);
 
-const notifier = createNotifier<GameEvent & UIEvent>();
-const ui = new UI(notifier)
+const notifier = createNotifier<AllEvents>();
+const uiManager = new UiManager(notifier);
 const unitFactory = new UnitFactory(assetManager);
-const gameInputHandler = new GameInputHandler(grid, renderer, layout, ui, notifier);
-const menuInputHandler = new MenuInputHandler(renderer, ui, notifier);
+const gameInputHandler = new GameInputHandler(grid, renderer, layout, uiManager, notifier);
+const menuInputHandler = new MenuInputHandler(renderer, uiManager, notifier);
+const authHandler = new AuthHandler(notifier);
+const roomHandler = new RoomHandler(notifier);
 
 const dependencies = {
   grid: grid,
   renderer: renderer,
   layout: layout,
-  ui: ui,
+  uiManager: uiManager,
   notifier: notifier,
   inputHandlers: {
     gameInputHandler: gameInputHandler,
     menuInputHandler: menuInputHandler
   },
-  unitFactory: unitFactory
-}
+  unitFactory: unitFactory,
+  authHandler: authHandler,
+  roomHandler: roomHandler
+};
 
 const game = new Game(dependencies);
 game.start();

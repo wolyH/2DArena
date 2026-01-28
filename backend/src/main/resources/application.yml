@@ -1,0 +1,9 @@
+spring:
+  application:
+    name: backend
+  config:
+    import: "optional:file:.env[.properties]"
+
+jwt:
+  secret: ${JWT_SECRET}
+  expiration: ${JWT_EXPIRATION}

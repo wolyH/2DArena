@@ -11,7 +11,7 @@ export class Layout {
     #size: Point2D;
     #cameraOffset: Point2D;
 
-    #n: number
+    readonly #n: number
 
     //Forward matrix: Hex to Pixel
     readonly #f0 = Math.sqrt(3.0); 

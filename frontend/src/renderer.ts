@@ -1,8 +1,9 @@
 import { Layout } from "./layout.ts";
 import { Hex } from "./hex.ts";
 import { Unit } from "./unit.ts";
-import { UIButton } from "./ui.ts";
 import type { Grid } from "./grid.ts";
+import type { UiButton } from "./ui/UiButton.ts";
+import type { UiText } from "./ui/UiText.ts";
 
 export class Renderer {
     readonly gameCanvas: HTMLCanvasElement;
@@ -249,7 +250,7 @@ export class Renderer {
         ctx.restore();
     }
 
-    drawButton(btn: UIButton): void {
+    drawButton(btn: UiButton): void {
         const ctx = this.uiCtx;
         
         ctx.fillStyle = btn.isHovered() ? "#555" : "#333";
@@ -264,5 +265,17 @@ export class Renderer {
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.fillText(btn.label, btn.x + btn.width/2, btn.y + btn.height/2);
+    }
+
+    drawText(txt: UiText): void {
+        const ctx = this.uiCtx;
+
+        ctx.fillStyle = txt.color;
+        ctx.textAlign = txt.align;
+        ctx.textBaseline = "middle"; 
+
+        ctx.font = `${txt.fontSize}px sans-serif`;
+
+        ctx.fillText(txt.text, txt.x, txt.y);
     }
 }

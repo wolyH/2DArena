@@ -5,7 +5,7 @@ export class Grid {
     #map: Map<string, Hex>;
     #visibilityMap: Map<string, Array<string>>;
     #shrinkLevel: number;
-    #n: number;
+    readonly #n: number;
 
     constructor(n: number) {
         this.#n = n;
