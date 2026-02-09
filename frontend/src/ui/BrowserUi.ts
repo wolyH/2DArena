@@ -1,13 +1,22 @@
 import { Ui } from "./Ui";
 import { UiButton } from "./UiButton.ts";
-import type { Notifier } from "../utils.ts"
-import type { AllEvents } from "../game.ts";
-import type { RoomResponse } from "../dto/RoomResponse.ts";
+import type { EventBus } from "../utils.ts"
+import type { RoomResponses } from "../dto/RoomResponses.ts";
+import type { AllEvents } from "../event/events.ts";
 
 export class BrowserUi extends Ui {
-    constructor(notifier: Notifier<AllEvents>, rooms: Array<RoomResponse>) {
-        super(notifier)
+    #rooms: Array<RoomResponses.JoinRoom>;
 
+    constructor(
+        eventBus: EventBus<AllEvents>, 
+        rooms: Array<RoomResponses.JoinRoom>
+    ) {
+        super(eventBus);
+        this.#rooms = rooms;
+        this.update();
+    }
+
+    update(): void {
         const dpr = window.devicePixelRatio;
         const w = window.innerWidth * dpr;
         const h = window.innerHeight * dpr;
@@ -21,18 +30,18 @@ export class BrowserUi extends Ui {
         this.buttons.push(new UiButton(
             w * 0.05, topMargin, w * 0.15, btnH, 
             "Cancel", 
-            () => this.notifier.emit("cancel_browsing")
+            () => this.eventBus.emit("cancel_browsing")
         ));
 
         this.buttons.push(new UiButton(
             w * 0.80, topMargin, w * 0.15, btnH, 
             "Refresh", 
-            () => this.notifier.emit("refresh_rooms_requested")
+            () => this.eventBus.emit("refresh_rooms_requested")
         ));
 
         const listStartY = h * 0.20;
 
-        rooms.forEach((room, index) => {
+        this.#rooms.forEach((room, index) => {
             const y = listStartY + (index * (btnH + spacing));
             
             // Only add button if it fits on the screen vertically
@@ -43,7 +52,7 @@ export class BrowserUi extends Ui {
                     btnW, 
                     btnH, 
                     `Join ${room.creatorName}`, 
-                    () => this.notifier.emit("join_room_requested", room.roomId)
+                    () => this.eventBus.emit("join_room_requested", room.roomId)
                 ));
             }
         });

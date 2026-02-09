@@ -1,12 +1,15 @@
 import { Ui } from "./Ui";
 import { UiButton } from "./UiButton.ts";
-import type { Notifier } from "../utils.ts"
-import type { AllEvents } from "../game.ts";
+import type { EventBus } from "../utils.ts"
+import type { AllEvents } from "../event/events.ts";
 
 export class LoginUi extends Ui {
-    constructor(notifier: Notifier<AllEvents>) {
-        super(notifier)
+    constructor(eventBus: EventBus<AllEvents>) {
+        super(eventBus);
+        this.update();
+    }
 
+    update(): void {
         const dpr = window.devicePixelRatio;
         const w = window.innerWidth * dpr;
         const h = window.innerHeight * dpr;
@@ -23,7 +26,7 @@ export class LoginUi extends Ui {
             btnW,
             btnH,
             "Log in", 
-            () => this.notifier.emit("login_requested", randomName)
+            () => this.eventBus.emit("login_requested", randomName)
         ));
     }
 }

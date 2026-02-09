@@ -2,24 +2,29 @@ package com.wolyh.game.backend.model;
 
 import java.util.UUID;
 
-import lombok.Data;
-import lombok.EqualsAndHashCode;
+import lombok.Getter;
+import lombok.Setter;
 
-@Data
-@EqualsAndHashCode(onlyExplicitlyIncluded = true)
+@Getter
+@Setter
 public class Room {
 
-    @EqualsAndHashCode.Include
-    private String id;
-
+    public final String id;
     private String creatorName;
     private String guestName;
-    private RoomStatus status;
+    private Status status;
 
     public Room(String creatorName) {
         this.id = UUID.randomUUID().toString();
         this.creatorName = creatorName;
-        this.status = RoomStatus.WAITING;
+        this.status = Status.WAITING;
+    }
+
+    public static enum Status {
+        WAITING,
+        FULL,
+        PLAYING,
+        FINISHED
     }
 
 }

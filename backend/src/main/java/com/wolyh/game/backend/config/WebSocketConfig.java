@@ -18,7 +18,8 @@ import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBr
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
 
-import com.wolyh.game.backend.util.JwtUtil;
+import com.wolyh.game.backend.service.RoomService;
+import com.wolyh.game.backend.utils.JwtUtil;
 
 @Configuration
 @EnableWebSocketMessageBroker
@@ -26,6 +27,9 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Autowired
     private JwtUtil jwtUtil;
+    
+    @Autowired
+    private RoomService roomService;
     
     @Override
     public void configureMessageBroker(MessageBrokerRegistry config) {
@@ -67,7 +71,57 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
                     }
                 }
 
-                if (StompCommand.SUBSCRIBE.equals(accessor.getCommand())) {}
+                if (StompCommand.SUBSCRIBE.equals(accessor.getCommand())) {
+                    UsernamePasswordAuthenticationToken user = 
+                        (UsernamePasswordAuthenticationToken) accessor.getUser();
+                    
+                    if(user == null) {
+                        throw new MessageDeliveryException("User must connect before subscribing");
+                    }
+
+                    String username = user.getName();
+                    String destination = accessor.getDestination();
+
+                    if (destination != null && destination.startsWith("/topic/room/")) {
+                        String[] parts = destination.split("/");
+                        if(parts.length < 4) {
+                             throw new MessageDeliveryException(
+                                "URL /topic/room must contain a roomId"
+                            );
+                        }
+                        String roomId = parts[3];
+                        Boolean isPlayerInRoom = roomService.isPlayerInRoom(username, roomId);
+                        if (isPlayerInRoom == null) {
+                             throw new MessageDeliveryException(
+                                "Room " + roomId + " does not exist"
+                            );
+                        }
+                        if (!isPlayerInRoom) {
+                            throw new MessageDeliveryException(
+                                "You are not authorized to subscribe to the room: " + roomId
+                            );
+                        }
+                    }
+                    else if (destination != null && destination.startsWith("/user/queue/specific-player")) {
+                        String roomId = accessor.getFirstNativeHeader("roomId");
+
+                        if (roomId == null || roomId.isEmpty()) {
+                            throw new MessageDeliveryException("roomId header required");
+                        }
+                        Boolean isPlayerInRoom = roomService.isPlayerInRoom(username, roomId);
+    
+                        if (isPlayerInRoom == null) {
+                             throw new MessageDeliveryException(
+                                "Room " + roomId + " does not exist"
+                            );
+                        }
+                        if (!isPlayerInRoom) {
+                            throw new MessageDeliveryException(
+                                "You are not authorized to subscribe to the room: " + roomId
+                            );
+                        }
+                    }
+                }
                 return message;
             }
         });

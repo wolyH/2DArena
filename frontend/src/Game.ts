@@ -1,0 +1,156 @@
+import type { CameraManager } from "./CameraManager";
+import type { GameActionEventHandler } from "./event/handler/GameActionEventHandler";
+import type { GameScreenEventHandler } from "./event/handler/GameScreenEventHandler";
+import type { InputEventHandler } from "./event/handler/InputEventHandler";
+import type { MenuEventHandler } from "./event/handler/MenuEventHandler";
+import type { NotificationEventHandler } from "./event/handler/NotificationEventHandler";
+import type { FovManager } from "./FovManager";
+import { Hex } from "./Hex";
+import type { MenuInputHandler } from "./input/MenuInputHandler";
+import type { Layout } from "./Layout";
+import type { MapManager } from "./MapManager";
+import type { MovementManager } from "./MovementManager";
+import type { NotificationManager } from "./NotificationManager";
+import type { GameRenderer } from "./rendering/GameRenderer";
+import { UiManager } from "./ui/UiManager";
+import type { Unit } from "./unit/Unit";
+import type { UnitManager } from "./unit/UnitManager";
+
+export class Game {
+    #gameActionEventHandler: GameActionEventHandler;
+    #gameScreenEventHandler: GameScreenEventHandler;
+    #inputEventHandler: InputEventHandler;
+    #menuEventHandler: MenuEventHandler;
+    #notificationEventHandler: NotificationEventHandler;
+    #menuInputHandler: MenuInputHandler;
+    #gameRenderer: GameRenderer;
+    #uiManager: UiManager;
+    #cameraManager: CameraManager;
+    #unitManager: UnitManager;
+    #movementManager: MovementManager;
+    #layout: Layout;
+    #mapManager: MapManager;
+    #notificationManager: NotificationManager;
+    #fovManager: FovManager;
+
+    #previousTime: number = 0;
+
+    constructor (
+        gameActionEventHandler: GameActionEventHandler,
+        gameScreenEventHandler: GameScreenEventHandler,
+        inputEventHandler: InputEventHandler,
+        menuEventHandler: MenuEventHandler,
+        notificationEventHandler: NotificationEventHandler,
+        menuInputHandler: MenuInputHandler,
+        gameRenderer: GameRenderer,
+        uiManager: UiManager,
+        cameraManager: CameraManager,
+        unitManager: UnitManager,
+        movementManager: MovementManager,
+        layout: Layout,
+        mapManager: MapManager,
+        notificationManager: NotificationManager,
+        fovManager: FovManager
+    ) {
+        this.#gameActionEventHandler = gameActionEventHandler;
+        this.#gameScreenEventHandler = gameScreenEventHandler;
+        this.#inputEventHandler = inputEventHandler;
+        this.#menuEventHandler = menuEventHandler;
+        this.#notificationEventHandler = notificationEventHandler;
+        this.#menuInputHandler = menuInputHandler;
+        this.#gameRenderer = gameRenderer;
+        this.#uiManager = uiManager
+        this.#cameraManager = cameraManager;
+        this.#unitManager = unitManager;
+        this.#movementManager = movementManager;
+        this.#layout = layout;
+        this.#mapManager = mapManager;
+        this.#notificationManager = notificationManager;
+        this.#fovManager = fovManager;
+    }
+
+    start(): void {
+        this.#gameActionEventHandler.setup();
+        this.#gameScreenEventHandler.setup();
+        this.#inputEventHandler.setup();
+        this.#menuEventHandler.setup();
+        this.#notificationEventHandler.setup();
+        this.#menuInputHandler.setupEventListeners();
+        this.loop();
+    }
+
+    //Main game loop
+    private loop = (currentTime: number = 0): void => {
+        const delta = (currentTime - this.#previousTime) / 100;
+        this.#previousTime = currentTime;
+
+        this.#gameRenderer.clear();
+        switch (this.#uiManager.state) {
+            case "MENU":
+                this.#notificationManager.process();
+                this.#gameRenderer.drawUi();
+                break;
+            case "GAME":
+                if(this.#unitManager.getActiveUnit().is("Idle")) {
+                    this.#notificationManager.process();
+                }
+                this.updateGame(delta);
+                this.#gameRenderer.drawGame();
+                this.#gameRenderer.drawUi();
+                break;
+        }
+        requestAnimationFrame(this.loop);
+    }
+
+    private updateGame(delta: number): void {
+        this.#cameraManager.updateCamera(delta);
+        this.updateAll(delta);
+    }
+
+    private updateAll(delta: number): void {
+        this.#unitManager.forEachAliveUnit(unit => {
+            if (unit.is("Moving") && !this.#movementManager.isMoving()) {
+                unit.idle();
+            }
+            if(unit.is("Moving") && this.#movementManager.isMoving()) {
+                this.moveUnitTowardGoal(unit, delta);
+            }
+            unit.update();
+        });
+    }
+        
+    private moveUnitTowardGoal(unit: Unit, delta: number): void {
+        const [goalX, goalY] = this.#layout.hexToWorld(this.#movementManager.getNextGoal());
+        const dx = goalX - unit.x;
+        const dy = goalY - unit.y;  
+
+        this.#unitManager.updateUnitDirection(unit, dx);
+
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        if (distance < unit.speed * delta) {
+            this.#movementManager.advance();
+            unit.x = goalX;
+            unit.y = goalY;
+        }
+        else {
+            unit.x += (dx / distance) * unit.speed * delta;
+            unit.y += (dy / distance) * unit.speed * delta;
+        }
+
+        this.updateUnitHex(unit);
+    }
+
+    private updateUnitHex(unit: Unit): void {
+        const [q,r,_] = this.#layout.worldToHex({x: unit.x, y: unit.y});
+        const AdjacentHex = this.#mapManager.getHex(Hex.hashCode(q, r));
+
+        if (!AdjacentHex) {
+            throw new Error("unit not on mapManager");
+        }
+        if (!unit.hex.equals(AdjacentHex)) {
+            this.#fovManager.setFov(this.#movementManager.getCurrentFov());
+            unit.setHex(AdjacentHex);
+        }
+    }
+}

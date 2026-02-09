@@ -9,7 +9,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.wolyh.game.backend.dto.AuthRequest;
 import com.wolyh.game.backend.dto.AuthResponse;
-import com.wolyh.game.backend.util.JwtUtil;
+import com.wolyh.game.backend.utils.JwtUtil;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -26,7 +26,6 @@ public class AuthController {
             .isAuthenticated(true)
             .build();
         return ResponseEntity.ok(response);
-
     }
     
 }

@@ -1,12 +1,15 @@
 import { Ui } from "./Ui";
 import { UiButton } from "./UiButton.ts";
-import type { Notifier } from "../utils.ts"
-import type { AllEvents } from "../game.ts";
+import type { EventBus } from "../utils.ts"
+import type { AllEvents } from "../event/events.ts";
 
 export class StartUi extends Ui {
-    constructor(notifier: Notifier<AllEvents>) {
-        super(notifier)
+    constructor(eventBus: EventBus<AllEvents>) {
+        super(eventBus);
+        this.update();
+    }
 
+    update(): void {
         const dpr = window.devicePixelRatio;
         const w = window.innerWidth * dpr;
         const h = window.innerHeight * dpr;
@@ -24,7 +27,7 @@ export class StartUi extends Ui {
             btnW,
             btnH,
             "Create Room",
-            () => this.notifier.emit("create_room_requested") 
+            () => this.eventBus.emit("create_room_requested") 
         ));
 
         // 2. Join Room (Browse) Button
@@ -35,8 +38,7 @@ export class StartUi extends Ui {
             btnW,
             btnH,
             "Join Room",
-            () => this.notifier.emit("browse_rooms_requested") // Triggers the fetch and UI swap
+            () => this.eventBus.emit("browse_rooms_requested") // Triggers the fetch and UI swap
         ));
-        
     }
 }

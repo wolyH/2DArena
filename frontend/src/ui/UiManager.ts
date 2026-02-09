@@ -1,5 +1,4 @@
-import type { Notifier } from "../utils.ts"
-import type { AllEvents } from "../game.ts";
+import type { EventBus } from "../utils.ts"
 import { Ui } from "./Ui";
 import { LoginUi } from "./LoginUi";
 import { StartUi } from "./StartUi.ts";
@@ -7,17 +6,23 @@ import { BrowserUi } from "./BrowserUi.ts";
 import { EndUi } from "./EndUi.ts";
 import { GameUi } from "./GameUi.ts";
 import { RoomUi } from "./RoomUi.ts";
-import type { RoomResponse } from "../dto/RoomResponse.ts";
 import type { UiButton } from "./UiButton.ts";
+import type { RoomResponses } from "../dto/RoomResponses.ts";
+import type { AllEvents } from "../event/events.ts";
 
 export class UiManager {
     #currentUi: Ui;
-    #notifier: Notifier<AllEvents>;
+    #eventBus: EventBus<AllEvents>;
     #state: "MENU" | "PENDING" | "GAME" = "MENU";
 
-    constructor(notifier: Notifier<AllEvents>) {
-        this.#notifier = notifier;
-        this.#currentUi = new LoginUi(notifier);
+    constructor(eventBus: EventBus<AllEvents>) {
+        this.#eventBus = eventBus;
+        this.#currentUi = new LoginUi(eventBus);
+    }
+
+    update(): void {
+        this.#currentUi.clear();
+        this.#currentUi.update();
     }
 
     getHoveredButton(x: number, y: number): UiButton | undefined {
@@ -45,33 +50,33 @@ export class UiManager {
         return this.#state;
     }
 
-    showBrowser(rooms: RoomResponse[]) {
+    showBrowser(rooms: Array<RoomResponses.JoinRoom>) {
         this.#state = "MENU";
-        this.#currentUi = new BrowserUi(this.#notifier, rooms);
+        this.#currentUi = new BrowserUi(this.#eventBus, rooms);
     }
 
-    showEnd() {
+    showEnd(gameWon: boolean) {
         this.#state = "MENU";
-        this.#currentUi = new EndUi(this.#notifier);
+        this.#currentUi = new EndUi(this.#eventBus, gameWon);
     }
 
     showGame() {
         this.#state = "GAME";
-        this.#currentUi = new GameUi(this.#notifier);
+        this.#currentUi = new GameUi(this.#eventBus);
     }
 
     showLogin() {
         this.#state = "MENU";
-        this.#currentUi = new LoginUi(this.#notifier);
+        this.#currentUi = new LoginUi(this.#eventBus);
     }
 
     showRoom(isCreator: boolean, player: string, opponent: string | undefined) {
         this.#state = "MENU";
-        this.#currentUi = new RoomUi(this.#notifier, isCreator,  player, opponent);
+        this.#currentUi = new RoomUi(this.#eventBus, isCreator,  player, opponent);
     }
 
     showStart() {
         this.#state = "MENU";
-        this.#currentUi = new StartUi(this.#notifier);
+        this.#currentUi = new StartUi(this.#eventBus);
     }
 }

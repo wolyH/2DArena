@@ -7,7 +7,6 @@ import lombok.Setter;
 @Setter
 public class Hex {
     
-    private boolean isVisible = false;
     private final boolean isObstacle;
     private int q;
     private int r;
@@ -44,6 +43,10 @@ public class Hex {
 
     public static String key(int q, int r) {
         return q + "_" + r;
+    }
+
+    public boolean isTraversable() {
+        return (unit == null || unit.isDead()) && !isObstacle;
     }
   
 }

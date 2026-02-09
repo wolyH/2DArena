@@ -1,12 +1,16 @@
 import { Ui } from "./Ui";
 import { UiButton } from "./UiButton.ts";
-import type { Notifier } from "../utils.ts"
-import type { AllEvents } from "../game.ts";
+import type { EventBus } from "../utils.ts"
+import type { AllEvents } from "../event/events.ts";
+
 
 export class GameUi extends Ui {
-    constructor(notifier: Notifier<AllEvents>) {
-        super(notifier)
+    constructor(eventBus: EventBus<AllEvents>) {
+        super(eventBus);
+        this.update();
+    }
 
+    update(): void {
         const dpr = window.devicePixelRatio;
         const w = window.innerWidth * dpr;
         const h = window.innerHeight * dpr;
@@ -21,7 +25,7 @@ export class GameUi extends Ui {
             btnW,
             btnH,
             "Skip Turn",
-            () => this.notifier.emit("skip_turn_requested")
+            () => this.eventBus.emit("turn_skip_requested")
         ));
 
         this.buttons.push(new UiButton(
@@ -29,8 +33,8 @@ export class GameUi extends Ui {
             margin,
             btnW,
             btnH,
-            "Surrender",
-            () => this.notifier.emit("leave_room_requested")
+            "Leave Game",
+            () => this.eventBus.emit("leave_room_requested")
         ));
     }
 }

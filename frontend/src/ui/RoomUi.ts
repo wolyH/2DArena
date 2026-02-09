@@ -1,13 +1,28 @@
 import { Ui } from "./Ui";
 import { UiButton } from "./UiButton.ts";
-import type { Notifier } from "../utils.ts"
-import type { AllEvents } from "../game.ts";
+import type { EventBus } from "../utils.ts"
 import { UiText } from "./UiText.ts";
+import type { AllEvents } from "../event/events.ts";
 
 export class RoomUi extends Ui {
-    constructor(notifier: Notifier<AllEvents>, isCreator: boolean, player: string, opponent: string | undefined) {
-        super(notifier)
+    #isCreator: boolean;
+    #player: string;
+    #opponent: string | undefined;
 
+    constructor(
+        eventBus: EventBus<AllEvents>, 
+        isCreator: boolean, 
+        player: string,
+        opponent: string | undefined
+    ) {
+        super(eventBus);
+        this.#isCreator = isCreator;
+        this.#player = player;
+        this.#opponent = opponent;
+        this.update();
+    }
+
+    update(): void {
         const dpr = window.devicePixelRatio;
         const w = window.innerWidth * dpr;
         const h = window.innerHeight * dpr;
@@ -24,13 +39,13 @@ export class RoomUi extends Ui {
             w * 0.15,
             btnH,
             "Leave",
-            () => this.notifier.emit("leave_room_requested")
+            () => this.eventBus.emit("leave_room_requested")
         ));
 
         this.texts.push(new UiText(
             w / 2, 
             h * 0.2, 
-            `Player: ${player}`, 
+            `Player: ${this.#player}`, 
             28, 
             "#FFFFFF"
         ));
@@ -38,19 +53,19 @@ export class RoomUi extends Ui {
         this.texts.push(new UiText(
             w / 2, 
             h * 0.28, 
-            opponent ? `Opponent: ${opponent}` : "Waiting for opponent...", 
+            this.#opponent ? `Opponent: ${this.#opponent}` : "Waiting for opponent...", 
             24, 
              "#FFFFFF"
         ));
 
-        if (isCreator && opponent) {
+        if (this.#isCreator && this.#opponent) {
             this.buttons.push(new UiButton(
                 centerX,
                 centerY,
                 btnW,
                 btnH,
                 "Start Game",
-                () => this.notifier.emit("start_game_requested")
+                () => this.eventBus.emit("start_game_requested")
             ));
         }
     }
