@@ -21,36 +21,16 @@ public class PathManager {
         this.fovManager = fovManager;
     }
 
-    private record SearchNeighborsResult(List<Hex> neighbors, boolean earlyExit) {}
-
-    public SearchNeighborsResult searchNeighbors(Hex h, Hex goal) {
-        ArrayList<Hex> neighbors = new ArrayList<>(6);
-        int[][] directionVectors = {
-            {+1,  0, -1},
-            {+1, -1,  0},
-            { 0, -1, +1},
-            {-1,  0, +1},
-            {-1, +1,  0},
-            { 0, +1, -1}
-        };
-
-        for (int[] vector : directionVectors) {
-            Hex neighbor = mapManager.getHex(Hex.key(h.getQ() + vector[0], h.getR() + vector[1]));
-            if(neighbor != null && neighbor.isTraversable() && fovManager.isVisible(neighbor)) {
-                neighbors.add(neighbor);
-                if(goal.getKey().equals(neighbor.getKey())) {
-                    return new SearchNeighborsResult(neighbors, true);
-                }
-            }
+    public List<HexCoordinates> searchPath(HexCoordinates goalCoords, String username) {
+        if(!username.equals(unitManager.player1) && !username.equals(unitManager.player2)) {
+             throw new IllegalArgumentException(
+                "username must be the username of a player present in the room"
+            );
         }
 
-        return new SearchNeighborsResult(neighbors, false);
-    }
-
-    public ArrayList<HexCoordinates> searchPath(HexCoordinates goalCoords) {
         ArrayList<HexCoordinates> path = new ArrayList<>();
 
-        Hex start = unitManager.getUnitHex(unitManager.getUnitIdx());
+        Hex start = unitManager.getActiveUnitHex();
         Hex goal = mapManager.getHex(Hex.key(goalCoords.q(), goalCoords.r()));
 
         if(start == null || goal == null || start.getKey().equals(goal.getKey())) {
@@ -69,7 +49,7 @@ public class PathManager {
             Hex current = frontier.get(startIdx);
             startIdx++;
 
-            SearchNeighborsResult result = searchNeighbors(current, goal);
+            SearchNeighborsResult result = searchNeighbors(current, goal, username);
             if (result.earlyExit()) {
                 cameFrom.put(goal.getKey(), current.getKey());
                 break;
@@ -102,5 +82,54 @@ public class PathManager {
         Collections.reverse(path);
 
         return path;
+    }
+
+    public List<HexCoordinates> calculateEnemyPovPath(List<HexCoordinates> path, String enemy) {
+        ArrayList<HexCoordinates> enemyPovPath = new ArrayList<>();
+
+        boolean prevVisible = false;
+        for (int i = 0 ; i < path.size() ; i++) {
+            boolean currVisible = fovManager.isVisible(path.get(i), enemy);
+
+            if (currVisible && !prevVisible && i > 0) {
+                enemyPovPath.add(path.get(i - 1));
+            }
+            if (currVisible) {
+                enemyPovPath.add(path.get(i));
+            }
+        
+            if (!currVisible && prevVisible) {
+                enemyPovPath.add(path.get(i));
+            }
+            
+            prevVisible = currVisible;
+        }   
+        return enemyPovPath;
+    }
+
+    private record SearchNeighborsResult(List<Hex> neighbors, boolean earlyExit) {}
+
+    private SearchNeighborsResult searchNeighbors(Hex h, Hex goal, String username) {
+        ArrayList<Hex> neighbors = new ArrayList<>(6);
+        int[][] directionVectors = {
+            {+1,  0, -1},
+            {+1, -1,  0},
+            { 0, -1, +1},
+            {-1,  0, +1},
+            {-1, +1,  0},
+            { 0, +1, -1}
+        };
+
+        for (int[] vector : directionVectors) {
+            Hex neighbor = mapManager.getHex(Hex.key(h.getQ() + vector[0], h.getR() + vector[1]));
+            if(neighbor != null && neighbor.isTraversable() && fovManager.isVisible(neighbor, username)) {
+                neighbors.add(neighbor);
+                if(goal.getKey().equals(neighbor.getKey())) {
+                    return new SearchNeighborsResult(neighbors, true);
+                }
+            }
+        }
+
+        return new SearchNeighborsResult(neighbors, false);
     }
 }

@@ -1,7 +1,5 @@
 package com.wolyh.game.backend.model;
 
-import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -38,16 +36,12 @@ public class Game {
         fovManager.resetFov();
     }
 
-    public Set<String> getFov() {
-        return fovManager.getFov();
+    public Set<String> getFov(String username) {
+        return fovManager.getFov(username);
     }
 
     public int getTurn() {
         return turn;
-    }
-
-    public int getUnitIdx() {
-        return unitManager.getUnitIdx();
     }
 
     public int getShrinkLevel() {
@@ -62,8 +56,14 @@ public class Game {
         return unitManager.getActivePlayer();
     }
 
+    public String getInactivePlayer() {
+        if(getActivePlayer().equals(player1)) {
+            return player2;
+        }
+        return player1;
+    }
     public EndTurnResult skipTurn(int unitIdx) {
-        if(unitManager.getUnitIdx() != unitIdx) {
+        if(!unitManager.isUnitActive(unitIdx)) {
             return null;
         }
         return endTurn();
@@ -82,15 +82,23 @@ public class Game {
         return endTurn();
     }
 
-    public ArrayList<HexCoordinates> searchPath(HexCoordinates goalCoords) {
-        return pathManager.searchPath(goalCoords);
+    public List<HexCoordinates> searchPath(HexCoordinates goalCoords) {
+        return pathManager.searchPath(goalCoords, getActivePlayer());
     }
 
-    public List<Set<String>> getPathFov(List<HexCoordinates> path) {
-        return fovManager.getPathFov(path);
+    public List<Set<String>> getPathFov(List<HexCoordinates> path, String username) {
+        return fovManager.getPathFov(path, username);
     }
 
-    public record AttackResult(EndTurnResult endTurnResult, Set<String> fov) {}
+    public List<List<UnitCoordinates>> getVisibleUnitsAlongPath(List<Set<String>> pathFov) {
+        return this.unitManager.getVisibleUnitsAlongPath(pathFov);
+    }
+
+    public List<HexCoordinates> calculateEnemyPovPath(List<HexCoordinates> path, String enemy) {
+        return pathManager.calculateEnemyPovPath(path, enemy);
+    }
+
+    public record AttackResult(EndTurnResult endTurnResult, Set<String> fov1,  Set<String> fov2) {}
 
     public AttackResult attack(HexCoordinates coords) {
         Hex hex = mapManager.getHex(Hex.key(coords.q(), coords.r()));
@@ -101,8 +109,9 @@ public class Game {
 
         hex.getUnit().setDead(true);
         fovManager.updateFov();
-        Set<String> fov = getFov();
-        return new AttackResult(endTurn(), fov);
+        Set<String> fov1 = getFov(player1);
+        Set<String> fov2 = getFov(player2);
+        return new AttackResult(endTurn(), fov1, fov2);
     }
 
     public boolean canUnitMoveOnHex(int unitIdx, HexCoordinates coords) {
@@ -111,10 +120,10 @@ public class Game {
         if(hex == null) {
             return false;
         }
-        if (unitManager.getUnitIdx() != unitIdx) {
+        if (!unitManager.isUnitActive(unitIdx)) {
             return false;
         }
-        if (!hex.isTraversable() || !fovManager.isVisible(hex)) {
+        if (!hex.isTraversable() || !fovManager.isVisible(hex, getActivePlayer())) {
             return false;
         }
         return true;
@@ -124,17 +133,23 @@ public class Game {
         Hex hex = mapManager.getHex(Hex.key(coords.q(), coords.r()));
 
         if(hex == null) {
+            System.err.println("Target hex is not on the map");
             return false;
         }
 
-        if (unitManager.getUnitIdx() != unitIdx) {
+        if (!unitManager.isUnitActive(unitIdx)) {
+            System.err.println("Unit is not active");
             return false;
         }
 
         if (hex.isTraversable() || 
-            !fovManager.isVisible(hex) || 
+            !fovManager.isVisible(hex, getActivePlayer()) || 
             hex.getUnit().getPlayer().equals(unitManager.getActivePlayer())
         ) {
+            System.err.println(hex.isTraversable());
+            System.err.println(!fovManager.isVisible(hex, getActivePlayer()));
+            System.err.println(hex.getUnit().getPlayer().equals(unitManager.getActivePlayer()));
+            System.err.println("Target unit is either an obstacle, not visible or occupied by an ally");
             return false;
         }
         return true;
@@ -142,20 +157,27 @@ public class Game {
 
     public record EndTurnResult(
         boolean turnChanged,
+        int nextUnitIdx,
         boolean mapShrinked,
-        Set<String> fov,
+        Set<String> fovActive,
+        Set<String> fovIncative,
         List<Integer> deadUnits, 
         boolean gameOver, 
         String winner
     ) {}
 
     public EndTurnResult endTurn() {
+        String activePlayer = getActivePlayer();
+        String inactivePlayer = getInactivePlayer();
+
         GameOverResult gameOverResult = checkGameOver();
         if(gameOverResult.isGameOver()) {
             return new EndTurnResult(
-                false, 
                 false,
-                new HashSet<>(),
+                -1,
+                false,
+                null,
+                null,
                 List.of(), 
                 true, 
                 gameOverResult.winner()
@@ -170,18 +192,24 @@ public class Game {
         }
         
         List<Integer> deadUnits = mapShrinked ? unitManager.killOutOfMapUnits() : List.of();
+        Set<String> fovActive = null;
+        Set<String> fovInactive = null;
+
         if (mapShrinked) {
             fovManager.resetFov();
+            fovActive = fovManager.getFov(activePlayer);
+            fovInactive = fovManager.getFov(inactivePlayer);
         }
-        Set<String> fov = mapShrinked ? getFov() : new HashSet<>();
 
         gameOverResult = checkGameOver();
         unitManager.updateActiveUnit();
 
         return new EndTurnResult(
-            true, 
+            true,
+            unitManager.getActiveUnitIdx(),
             mapShrinked,
-            fov,
+            fovActive,
+            fovInactive,
             deadUnits, 
             gameOverResult.isGameOver(), 
             gameOverResult.winner()
@@ -189,7 +217,7 @@ public class Game {
     }
 
     private boolean shouldShrinkMap() {
-        return turn % 5 == 0 && turn > 1;
+        return turn % 15 == 0 && turn > 1;
     }
 
     private record GameOverResult(boolean isGameOver, String winner) {}

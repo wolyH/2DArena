@@ -8,7 +8,7 @@ import lombok.Setter;
 public class Unit {
     
     private Hex hex;
-    public static final int VISIBILITY_RANGE = 1;
+    public static final int VISIBILITY_RANGE = 2;
     private final String player;
     private boolean isDead = false;
     public final int idx;

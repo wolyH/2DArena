@@ -92,12 +92,13 @@ public class RoomService {
             room.setStatus(Status.PLAYING);
             gameService.addGame(roomId, room.getCreatorName(), room.getGuestName());
 
-            Set<String> initialFov  = gameService.getGameFov(roomId);
+            Set<String> initialCreatorFov = gameService.getGameFov(roomId, room.getCreatorName());
+            Set<String> initialGuestFov = gameService.getGameFov(roomId, room.getGuestName());
 
-            GameStart data = new GameStart(room.getCreatorName(), room.getGuestName(), initialFov,  roomId);
+            GameStart data = new GameStart(room.getCreatorName(), room.getGuestName(), initialGuestFov,  roomId);
             
             return new RoomService.StartGameResult(
-                new RoomResponses.StartGame(room.getCreatorName(), room.getGuestName(), initialFov, roomId),
+                new RoomResponses.StartGame(room.getCreatorName(), room.getGuestName(), initialCreatorFov, roomId),
                 new Notification<GameStart>(Type.GAME_START, data),
                 room.getGuestName()
             );

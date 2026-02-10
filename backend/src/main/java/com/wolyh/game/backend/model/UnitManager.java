@@ -1,15 +1,18 @@
 package com.wolyh.game.backend.model;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.function.Consumer;
 
 public class UnitManager {
     private final MapManager mapManager;
     private final int nb_units = 3;
 
-    private String player1;
-    private String player2;
+    final String player1;
+    final String player2;
     private Unit[] units;
     private int unitIdx = 0;
 
@@ -24,17 +27,12 @@ public class UnitManager {
         this.units = new Unit[nb_units];
     }
 
-    public int getUnitIdx() {
+    public int getActiveUnitIdx() {
         return this.unitIdx;
     }
 
-    public Hex getUnitHex(int idx) {
-        if (idx < 0 || idx >= units.length) {
-            throw new IllegalArgumentException(
-                "Invalid unit index: " + idx + 
-                ". Must be between 0 and " + (units.length - 1));
-        }
-        return this.units[idx].getHex();
+    public Hex getActiveUnitHex() {
+        return this.units[unitIdx].getHex();
     }
 
     public void setUnitHex(int idx, Hex hex) {
@@ -57,10 +55,42 @@ public class UnitManager {
         }
     }
 
+    public List<List<UnitCoordinates>> getVisibleUnitsAlongPath(List<Set<String>> pathPov) {
+        if (pathPov == null || pathPov.isEmpty()) {
+            throw new IllegalArgumentException("pathPov is null or empty");
+        }
+
+        Map<String, UnitCoordinates> enemyUnitsByHex = new HashMap<>();
+
+        forEachAliveUnit(unit -> {
+            if (!isActivePlayer(unit) && unit.getHex() != null) {
+                Hex unitHex = unit.getHex();
+                String key = Hex.key(unitHex.getQ(), unitHex.getR());
+                enemyUnitsByHex.put(key, new UnitCoordinates(unit.idx, unitHex.getQ(), unitHex.getR()));
+            }
+        });
+
+        List<List<UnitCoordinates>> visibleUnitsAlongPath = new ArrayList<>(pathPov.size());
+
+        for(Set<String> snapshot: pathPov) {
+            List<UnitCoordinates> visibleUnits = new ArrayList<>();
+            for (String hexKey : snapshot) {
+                UnitCoordinates unit = enemyUnitsByHex.get(hexKey);
+                if (unit != null) {
+                    visibleUnits.add(unit);
+                }
+            }
+            visibleUnitsAlongPath.add(visibleUnits);
+        }
+        
+        return visibleUnitsAlongPath;
+    }
+
     public void updateActiveUnit() {
         for (int i = 1 ; i < units.length ; i++) {
             int nextIdx = (unitIdx + i) % units.length;
             if (!units[nextIdx].isDead()) {
+                System.out.println(nextIdx);
                 unitIdx = nextIdx;
                 break;
             }
@@ -71,8 +101,16 @@ public class UnitManager {
         return units[unitIdx].getPlayer();
     }
 
+    public boolean isActivePlayer(Unit unit) {
+        return unit.getPlayer().equals(getActivePlayer());
+    }
+
     public boolean isUnitActive(Unit unit) {
         return this.unitIdx == unit.idx;
+    }
+
+    public boolean isUnitActive(int idx) {
+        return this.unitIdx == idx;
     }
 
     public void spawnUnits() {

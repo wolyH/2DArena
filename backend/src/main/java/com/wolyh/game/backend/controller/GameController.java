@@ -1,6 +1,8 @@
 package com.wolyh.game.backend.controller;
 
 import java.security.Principal;
+import java.util.ArrayList;
+import java.util.List;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.messaging.handler.annotation.DestinationVariable;
@@ -10,10 +12,13 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Controller;
 
 import com.wolyh.game.backend.dto.Notification;
+import com.wolyh.game.backend.dto.Notification.NotificationBatch;
 import com.wolyh.game.backend.dto.UnitActionRequest;
 import com.wolyh.game.backend.service.GameService;
 import com.wolyh.game.backend.service.GameService.SkipTurnResult;
 import com.wolyh.game.backend.service.GameService.UnitActionResult;
+import com.wolyh.game.backend.service.GameService.UnitAttackResult;
+import com.wolyh.game.backend.service.GameService.UnitMoveResult;
 
 @Controller
 public class GameController {
@@ -38,12 +43,23 @@ public class GameController {
             return;
         }
 
-        sendIfNotNull(
-            roomId,
-            result.turnChangeNotif(),
-            result.mapShrinkNotif(), 
-            result.gameOverNotif()
+        sendBatchToUser(
+            result.activePlayer(),
+            batch(
+                result.turnChangeNotif(), 
+                result.mapShrinkNotifActive(), 
+                result.gameOverNotif()
+            )
         );
+
+        sendBatchToUser(
+            result.inactivePlayer(),
+            batch(
+                result.turnChangeNotif(), 
+                result.mapShrinkNotifIncative(), 
+                result.gameOverNotif()
+            )
+        );     
     }
 
     @MessageMapping("/room/{roomId}/unit-action")
@@ -60,22 +76,72 @@ public class GameController {
             return;
         }
 
-        sendIfNotNull(
-            roomId,
-            result.unitActionNotif(),
-            result.turnChangeNotif(),
-            result.mapShrinkNotif(), 
-            result.gameOverNotif()
-        );
-    }
-
-    private void sendIfNotNull(String roomId, Notification<?> ...notifications) {
-        String destination = "/topic/room/" + roomId;
-        for(Notification<?> notification : notifications) {
-            if (notification != null) {
-                messagingTemplate.convertAndSend(destination, notification);
+        switch (result) {
+            case UnitMoveResult moveResult -> {
+                sendBatchToUser(
+                    moveResult.activePlayer(),
+                    batch(
+                        moveResult.unitMoveNotifActive(),
+                        moveResult.turnChangeNotif(), 
+                        moveResult.mapShrinkNotifActive(), 
+                        moveResult.gameOverNotif()
+                    )
+                );   
+                sendBatchToUser(
+                    moveResult.inactivePlayer(),
+                    batch(
+                        moveResult.unitMoveNotifInactive(),
+                        moveResult.turnChangeNotif(), 
+                        moveResult.mapShrinkNotifInactive(), 
+                        moveResult.gameOverNotif()
+                    )
+                );   
+                
+            }
+            case UnitAttackResult attackResult -> {
+                sendBatchToUser(
+                    attackResult.activePlayer(),
+                    batch(
+                        attackResult.unitAttackNotifActive(),
+                        attackResult.turnChangeNotif(), 
+                        attackResult.mapShrinkNotifActive(), 
+                        attackResult.gameOverNotif()
+                    )
+                );   
+                sendBatchToUser(
+                    attackResult.inactivePlayer(),
+                    batch(
+                        attackResult.unitAttackNotifInactive(),
+                        attackResult.turnChangeNotif(), 
+                        attackResult.mapShrinkNotifInactive(), 
+                        attackResult.gameOverNotif()
+                    )
+                ); 
+            }
+            default -> {
+                 System.err.println("Unit Action Request not valid");
             }
         }
     }
 
+    private void sendBatchToUser(String username, NotificationBatch batch) {
+        if (username == null || batch == null || batch.notifications().isEmpty()) {
+            return;
+        }
+        messagingTemplate.convertAndSendToUser(
+            username,
+            "/queue/specific-player",
+            batch
+        );
+    }
+
+    private NotificationBatch batch(Notification<?>... notifs) {
+        List<Notification<?>> list = new ArrayList<>();
+        for (Notification<?> n : notifs) {
+            if (n != null) {
+                list.add(n);
+            }
+        }
+        return new NotificationBatch(list);
+    }
 }

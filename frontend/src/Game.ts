@@ -35,6 +35,8 @@ export class Game {
 
     #previousTime: number = 0;
 
+    readonly #targetFrameTime = 1000 / 60;
+
     constructor (
         gameActionEventHandler: GameActionEventHandler,
         gameScreenEventHandler: GameScreenEventHandler,
@@ -81,8 +83,16 @@ export class Game {
 
     //Main game loop
     private loop = (currentTime: number = 0): void => {
-        const delta = (currentTime - this.#previousTime) / 100;
-        this.#previousTime = currentTime;
+
+        const elapsed = currentTime - this.#previousTime;
+
+        if (elapsed < this.#targetFrameTime) {
+            requestAnimationFrame(this.loop);
+            return;
+        }
+
+        this.#previousTime = currentTime - (elapsed % this.#targetFrameTime);
+        const delta = this.#targetFrameTime / 1000;
 
         this.#gameRenderer.clear();
         switch (this.#uiManager.state) {

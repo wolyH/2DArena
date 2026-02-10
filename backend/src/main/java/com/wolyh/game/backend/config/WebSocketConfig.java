@@ -33,7 +33,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     
     @Override
     public void configureMessageBroker(MessageBrokerRegistry config) {
-        config.enableSimpleBroker("/topic", "/queue");
+        config.enableSimpleBroker("/queue");
         config.setApplicationDestinationPrefixes("/app");
     }
 
@@ -82,27 +82,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
                     String username = user.getName();
                     String destination = accessor.getDestination();
 
-                    if (destination != null && destination.startsWith("/topic/room/")) {
-                        String[] parts = destination.split("/");
-                        if(parts.length < 4) {
-                             throw new MessageDeliveryException(
-                                "URL /topic/room must contain a roomId"
-                            );
-                        }
-                        String roomId = parts[3];
-                        Boolean isPlayerInRoom = roomService.isPlayerInRoom(username, roomId);
-                        if (isPlayerInRoom == null) {
-                             throw new MessageDeliveryException(
-                                "Room " + roomId + " does not exist"
-                            );
-                        }
-                        if (!isPlayerInRoom) {
-                            throw new MessageDeliveryException(
-                                "You are not authorized to subscribe to the room: " + roomId
-                            );
-                        }
-                    }
-                    else if (destination != null && destination.startsWith("/user/queue/specific-player")) {
+                    if (destination != null && destination.startsWith("/user/queue/specific-player")) {
                         String roomId = accessor.getFirstNativeHeader("roomId");
 
                         if (roomId == null || roomId.isEmpty()) {
