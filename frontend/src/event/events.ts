@@ -1,5 +1,5 @@
 import type { RoomResponses } from "../dto/RoomResponses";
-import type { UnitAttackData, UnitMoveData } from "../dto/Notification";
+import type { AllyMoveData, EnemyMoveData, UnitAttackData } from "../dto/Notification";
 import type { Hex } from "../Hex";
 import type { UiButton } from "../ui/UiButton";
 
@@ -36,7 +36,8 @@ export type GameActionEvent = {
     unit_attack: (data: UnitAttackData) => void;
 
     unit_move_requested: (hex: Hex) => void;
-    unit_move: (data: UnitMoveData) => void;
+    ally_move: (data: AllyMoveData) => void;
+    enemy_move: (data: EnemyMoveData) => void;
 
     turn_change: (nextUnitIdx: number) => void;
     map_shrink: (shrinkLevel: number, deadUnits: Array<number>, fov :Array<string>) => void;

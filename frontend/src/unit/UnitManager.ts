@@ -38,12 +38,24 @@ export class UnitManager {
         this.#unitIdx = unitIdx;
     }
 
-    get units(): ReadonlyArray<Unit> {
-        return this.#units;
-    }
-
     getActiveUnit(): Unit {
         return this.#units[this.#unitIdx];
+    }
+
+    isDead(idx: number) {
+        if (idx < 0 || idx >= this.#units.length) {
+            throw new Error (`unit idx ${idx} is uncorrect`);
+        }
+        return this.#units[idx].isDead;
+    }
+
+    killOutOfMapUnits(deadUnits: Array<number>): void {
+        for (const idx of deadUnits) {
+            if (idx < 0 || idx > this.#units.length) {
+                throw new Error (`next unit id ${idx} is uncorrect`);
+            }
+            this.#units[idx].die();
+        }
     }
 
     spawnUnits(player1: string, player2: string): void {
@@ -56,15 +68,15 @@ export class UnitManager {
         const [x3, y3] = this.#layout.hexToWorld(hex3);
 
         if(player1 === this.#roomState.username && player2 === this.#roomState.opponent) {
-            const unit1 = this.#factory.createAlly(hex1, x1, y1, player1);
-            const unit2 = this.#factory.createEnemy(hex2, x2, y2, player2);
-            const unit3 = this.#factory.createEnemy(hex3, x3, y3, player2);
+            const unit1 = this.#factory.createAlly(hex1, x1, y1, player1, 0);
+            const unit2 = this.#factory.createEnemy(undefined, undefined, undefined, player2, 1);
+            const unit3 = this.#factory.createEnemy(undefined, undefined, undefined, player2, 2);
             this.setUnits([unit1, unit2, unit3]);
         }
         else if (player1 === this.#roomState.opponent && player2 === this.#roomState.username) {
-            const unit1 = this.#factory.createEnemy(hex1, x1, y1, player1);
-            const unit2 = this.#factory.createAlly(hex2, x2, y2, player2);
-            const unit3 = this.#factory.createAlly(hex3, x3, y3, player2);
+            const unit1 = this.#factory.createEnemy(undefined, undefined, undefined, player1, 0);
+            const unit2 = this.#factory.createAlly(hex2, x2, y2, player2, 1);
+            const unit3 = this.#factory.createAlly(hex3, x3, y3, player2, 2);
              this.setUnits([unit1, unit2, unit3]);
         }
     }
@@ -81,7 +93,35 @@ export class UnitManager {
             }
         }
     }
+    
+    public setEnemyLocation(enemyLocation: Map<number, Hex>): void {
+        for(const unit of this.#units) {
+            const hex = enemyLocation.get(unit.idx);
+            if(!this.unitIsEnemy(unit)) {
+                continue;
+            }
+            
+            if(hex === undefined && unit.hasHex()) {
+                unit.setHex(undefined)
+                unit.clearWorldPos();
+                continue;
+            }
+            else if (hex === undefined) {
+                continue;
+            }
 
+            if(hex.isObstacle || (hex.unit && hex.unit.idx !== unit.idx)) {
+                throw new Error(`Hex ${hex.hashCode} is already occupied`);
+            }
+
+            if (hex.unit === undefined) {
+                const [x, y] = this.#layout.hexToWorld(hex);
+                unit.setWorldPos(x, y);
+                unit.setHex(hex);
+            }
+        }
+    }
+ 
     updateUnitDirection(unit: Unit, dx: number): void {
         if (dx > 0) {
             unit.turnRight();
@@ -96,7 +136,9 @@ export class UnitManager {
             !targetHex.isObstacle &&
             this.#fovManager.isVisible(targetHex) && 
             targetHex.unit !== undefined &&
-            targetHex.unit.player === this.getUnitOpponent(attacker);
+            targetHex.unit.player === this.getUnitOpponent(attacker) &&
+            attacker.hex &&
+            attacker.hex.isNeighbor(targetHex);
     }
 
     canAttack(attacker: Unit, targetHex: Hex): boolean {

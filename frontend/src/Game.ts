@@ -111,6 +111,9 @@ export class Game {
         this.#unitManager.forEachAliveUnit(unit => {
             if (unit.is("Moving") && !this.#movementManager.isMoving()) {
                 unit.idle();
+                if(!unit.isVisible()) {
+                    unit.clearWorldPos();
+                }
             }
             if(unit.is("Moving") && this.#movementManager.isMoving()) {
                 this.moveUnitTowardGoal(unit, delta);
@@ -120,37 +123,66 @@ export class Game {
     }
         
     private moveUnitTowardGoal(unit: Unit, delta: number): void {
-        const [goalX, goalY] = this.#layout.hexToWorld(this.#movementManager.getNextGoal());
-        const dx = goalX - unit.x;
-        const dy = goalY - unit.y;  
+        const nextGoal = this.#movementManager.getNextGoal();
+        const [goalX, goalY] = this.#layout.hexToWorld(nextGoal);
+        const isGoalVisible = this.#fovManager.isVisible(nextGoal);
+        
+        const {x, y} = unit.getWorldPos();
+
+        if(x === undefined || y === undefined) {
+            throw new Error("Unit not in world")
+        }
+
+        const dx = goalX - x;
+        const dy = goalY - y;  
 
         this.#unitManager.updateUnitDirection(unit, dx);
 
         const distance = Math.sqrt(dx * dx + dy * dy);
+        const isTooClose = distance < unit.speed * delta;
 
-        if (distance < unit.speed * delta) {
-            this.#movementManager.advance();
-            unit.x = goalX;
-            unit.y = goalY;
+        const newX = isTooClose ? goalX : x + (dx / distance) * unit.speed * delta;
+        const newY = isTooClose ? goalY : y + (dy / distance) * unit.speed * delta;
+        unit.setWorldPos(newX, newY);
+
+        const [preQ, prevR, prevS] = this.#layout.worldToHex({x: x, y: y});
+        const prevAdjacentHex = this.#mapManager.getHex(Hex.hashCode(preQ, prevR));
+
+        const [newQ, newR, newS] = this.#layout.worldToHex({x: newX, y: newY});
+        const newAdjacentHex = this.#mapManager.getHex(Hex.hashCode(newQ, newR));
+
+        if (prevAdjacentHex === undefined || newAdjacentHex === undefined) {
+            throw new Error("unit not on map");
+        }
+
+        if(!isGoalVisible) {
+            this.clearUnitHex(unit, prevAdjacentHex, newAdjacentHex);
         }
         else {
-            unit.x += (dx / distance) * unit.speed * delta;
-            unit.y += (dy / distance) * unit.speed * delta;
+            this.updateUnitHex(unit, prevAdjacentHex, newAdjacentHex);
         }
 
-        this.updateUnitHex(unit);
+        if (isTooClose) {
+           this.#movementManager.shifPath(); 
+        }
     }
 
-    private updateUnitHex(unit: Unit): void {
-        const [q,r,_] = this.#layout.worldToHex({x: unit.x, y: unit.y});
-        const AdjacentHex = this.#mapManager.getHex(Hex.hashCode(q, r));
-
-        if (!AdjacentHex) {
-            throw new Error("unit not on mapManager");
+    private updateUnitHex(unit: Unit, prevAdjacentHex: Hex, newAdjacentHex: Hex): void {
+        if (prevAdjacentHex.hashCode !== newAdjacentHex.hashCode) {
+            const {currentFov, currentLocation} = this.#movementManager.getCurrentFovAndLocation();
+            this.#movementManager.shiftFovAndLocation();
+            if(currentFov && currentLocation) {
+                this.#fovManager.setFov(currentFov);
+                this.#unitManager.setEnemyLocation(currentLocation);
+            }
+            unit.setHex(newAdjacentHex);
         }
-        if (!unit.hex.equals(AdjacentHex)) {
-            this.#fovManager.setFov(this.#movementManager.getCurrentFov());
-            unit.setHex(AdjacentHex);
+    }
+
+    private clearUnitHex(unit: Unit, prevAdjacentHex: Hex, newAdjacentHex: Hex): void {
+        if (prevAdjacentHex.hashCode !== newAdjacentHex.hashCode) {
+            this.#movementManager.shiftFovAndLocation();
+            unit.setHex(undefined);
         }
     }
 }

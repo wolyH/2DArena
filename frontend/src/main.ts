@@ -128,6 +128,7 @@ const gameActionEventHandler = new GameActionEventHandler(
     pathPreviewManager,
     movementManager,
     fovManager,
+    layout,
     roomState
 );
 

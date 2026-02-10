@@ -50,8 +50,11 @@ export class NotificationManager {
             case "GAME_START":
                 this.#eventBus.emit("game_start", notification.data.player1, notification.data.player2, notification.data.fov);
                 break;
-            case "UNIT_MOVE":
-                 this.#eventBus.emit("unit_move", notification.data);
+            case "ALLY_MOVE":
+                 this.#eventBus.emit("ally_move", notification.data);
+                break;
+            case "ENEMY_MOVE":
+                this.#eventBus.emit("enemy_move", notification.data);
                 break;
             case "UNIT_ATTACK":
                 this.#eventBus.emit("unit_attack", notification.data);
@@ -93,7 +96,10 @@ export class NotificationManager {
                     return undefined;
                 }
                 return update;
-            case "UNIT_MOVE": 
+            case "ALLY_MOVE":
+                if (typeof data.unitIdx !== 'number') { 
+                    return undefined; 
+                }
                 if (!Array.isArray(data.path) || 
                     !data.path.every(
                         (x: any) => {
@@ -116,8 +122,36 @@ export class NotificationManager {
                 ) {
                     return undefined;
                 }
+
+                if (!Array.isArray(data.visibleUnitsAlongPath) ||
+                    !data.visibleUnitsAlongPath.every(
+                        (fov: any) => {
+                            return Array.isArray(fov) && fov.every(
+                                (x: any) => {
+                                    return (x && typeof x.q === "number" && typeof x.r === "number" && typeof x.idx === "number")
+                                }
+                            )
+                        }
+                    )
+                ) {
+                    return undefined;
+                }
                 
                 if (typeof data.unitIdx !== 'number') { 
+                    return undefined; 
+                }
+                return update;
+            case "ENEMY_MOVE":
+                if (typeof data.unitIdx !== 'number') { 
+                    return undefined; 
+                }
+                if (!Array.isArray(data.path) || 
+                    !data.path.every(
+                        (x: any) => {
+                            return (x && typeof x.q === "number" && typeof x.r === "number");
+                        }
+                    )
+                ) { 
                     return undefined; 
                 }
                 return update;

@@ -6,19 +6,20 @@ type Direction = 1 | -1;
 
 export class Unit {
     //position of the hex most adjacent to the unit on the grid
-    #hex: Hex
+    #hex: Hex | undefined
 
     //position of the unit on the screen
-    x: number;
-    y: number;
+    #x: number | undefined;
+    #y: number | undefined;
 
     //speed of the unit moving on the screen
     readonly speed: number;
 
     static readonly VISIBILITY_RANGE = 2;
 
-    //if the unit is on my team or not
     readonly player: string;
+    readonly idx: number;
+
     #isDead: boolean;
 
     #direction: Direction;
@@ -33,21 +34,26 @@ export class Unit {
     static readonly #ANIMATION_SPEED = 30;
 
     constructor(
-        hex: Hex,
-        x: number,
-        y: number,
+        hex: Hex | undefined,
+        x: number | undefined,
+        y: number | undefined,
         sprites: Record<UnitAction, Array<HTMLImageElement>>,
         speed: number,
-        username: string
+        username: string,
+        idx: number
     ) {
-        this.#hex = hex;
-        if(hex.unit && !hex.unit.isDead ) {
-            throw new Error("cannot spawn a unit on an occupied hex")
+        if(hex === undefined) {
+            this.#hex = undefined;
+        } else {
+            if(hex.unit && !hex.unit.isDead ) {
+                throw new Error("cannot spawn a unit on an occupied hex")
+            }
+            this.#hex = hex;
+            hex.unit = this;
         }
-        hex.unit = this;
 
-        this.x = x;
-        this.y = y;
+        this.#x = x;
+        this.#y = y;
 
         this.speed = speed;
 
@@ -59,10 +65,19 @@ export class Unit {
         
         this.player = username;
         this.#isDead = false;
+
+        this.idx = idx;
     }
 
     get hex(): Hex {
-        return this.#hex;
+        if(!this.isVisible()) {
+            throw new Error("unit is not visible");
+        }
+        return this.#hex!;
+    }
+
+    hasHex(): boolean {
+        return this.#hex !== undefined;
     }
 
     get direction(): number {
@@ -71,6 +86,23 @@ export class Unit {
 
     get isDead(): boolean {
         return this.#isDead;
+    }
+
+    setWorldPos(x: number, y: number): void {
+        this.#x = x;
+        this.#y = y;
+    }
+    clearWorldPos() {
+        this.#x = undefined;
+        this.#y = undefined;
+    }
+
+    getWorldPos(): {x: number | undefined, y:number | undefined} {
+        return {x:this.#x, y: this.#y};
+    }
+
+    isVisible(): boolean {
+        return !this.#isDead && this.#hex !== undefined;
     }
 
     update(): void {
@@ -125,18 +157,34 @@ export class Unit {
             throw new Error("unit is already dead");
         }
         this.#isDead = true;
-        this.#hex.unit = undefined;
         this.changeAction("Dying");
+        if(this.#hex === undefined) {
+            return;
+        }
+        this.#hex.unit = undefined;
     }
 
-    setHex(hex: Hex): void {
+    setHex(hex: Hex | undefined): void {
+        if(hex === undefined) {
+            if(this.#hex === undefined) {
+                return;
+            }
+            this.#hex.unit = undefined;
+            this.#hex = undefined;
+            return;
+        }
         if(hex.isObstacle || hex.unit) {
             throw Error("Unit cannot be on an obstacle or another Unit");
         }
-        this.#hex.unit = undefined;
+        
+        if(this.#hex !== undefined) {
+            this.#hex.unit = undefined;
+        }
+
         this.#hex = hex;
         hex.unit = this;
     }
+
 
     private changeAction(action: UnitAction): void {
         if (this.#action !== action) {

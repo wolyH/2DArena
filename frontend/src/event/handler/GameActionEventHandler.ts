@@ -11,6 +11,7 @@ import type { AllEvents } from "../events";
 import type { MovementManager } from "../../MovementManager";
 import type { PathPreviewManager } from "../../PathPreviewManager";
 import type { FovManager } from "../../FovManager";
+import type { Layout } from "../../Layout";
 
 export class GameActionEventHandler {
     readonly #eventBus: EventBus<AllEvents>;
@@ -23,6 +24,7 @@ export class GameActionEventHandler {
     readonly #pathPreviewManager: PathPreviewManager
     readonly #movementManager: MovementManager;
     readonly #fovManager: FovManager;
+    readonly #layout: Layout;
     readonly #roomState: RoomState;
 
     constructor(
@@ -36,6 +38,7 @@ export class GameActionEventHandler {
         pathPreviewManager: PathPreviewManager,
         movementManager: MovementManager,
         fovManager: FovManager,
+        layout: Layout,
         roomState: RoomState,
     ) {
         this.#eventBus = eventBus;
@@ -48,6 +51,7 @@ export class GameActionEventHandler {
         this.#pathPreviewManager = pathPreviewManager;
         this.#movementManager = movementManager;
         this.#fovManager = fovManager;
+        this.#layout = layout;
         this.#roomState = roomState;
     }
 
@@ -68,7 +72,7 @@ export class GameActionEventHandler {
 
         this.#eventBus.on("unit_attack", (data) => {
             if(data.attackerIdx !== this.#unitManager.unitIdx) {
-                throw new Error("Unit cannot attack");
+                throw new Error("Unit is not active");
             }
             const hex = this.#mapManager.getHex(
                 Hex.hashCode(
@@ -80,14 +84,24 @@ export class GameActionEventHandler {
             if (!hex || !hex.unit) {
                 throw new Error("Target hex or unit not found");
             }
+            const hexPos = hex.unit.getWorldPos();
+
+            if(hexPos.x === undefined || hexPos.y === undefined) {
+                throw new Error("Target unit not visible");
+            }
 
             const activeUnit = this.#unitManager.getActiveUnit();
+            const activeUnitPos = activeUnit.getWorldPos();
+
+            if(activeUnitPos.x === undefined || activeUnitPos.y === undefined) {
+                throw new Error("active unit not visible");
+            }
 
             if (!this.#unitManager.canBeAttacked(hex, activeUnit)) {
                 throw new Error("Hex cannot be attacked");
             }
 
-            const dx = hex!.unit!.x - activeUnit.x;
+            const dx = hexPos.x - activeUnitPos.x;
             this.#unitManager.updateUnitDirection(activeUnit, dx);
             activeUnit.strike();
             hex.unit.die();
@@ -107,17 +121,18 @@ export class GameActionEventHandler {
             );
         });
 
-        this.#eventBus.on("unit_move", (data) => {
+        this.#eventBus.on("ally_move", (data) => {
             if(data.unitIdx !== this.#unitManager.unitIdx) {
-                throw new Error("Unit cannot move");
+                throw new Error("Unit is not active");
             }
             if (data.path.length < 2) {
-                throw new Error("Path length should be > 2");
+                throw new Error("Path length should be >= 2");
             }
 
             const path: Array<Hex> = [];
+            const enemyLocationSnapshots: Array<Map<number, Hex>> = [];
 
-            for (let i = 0 ; i < data.path.length ; i++) {
+            for (let i = 1 ; i < data.path.length ; i++) {
                 const hex = this.#mapManager.getHex(
                     Hex.hashCode(data.path[i].q, data.path[i].r)
                 ); 
@@ -125,17 +140,72 @@ export class GameActionEventHandler {
                     throw new Error(`Hex number ${i} on path is undefined`);
                 }
                 path.push(hex);
+                 
+                const unitIdxByHex: Map<number, Hex> = new Map();
+                for (const unitCoords of data.visibleUnitsAlongPath[i-1]) {
+                    const unitHex = this.#mapManager.getHex(
+                        Hex.hashCode(unitCoords.q, unitCoords.r)
+                    );
+                    if(!unitHex) {
+                        throw new Error(
+                            `Enemy location snapshot number ${i} contains an undefined hex location`
+                        );
+                    }
+                    unitIdxByHex.set(unitCoords.idx, unitHex);
+                }
+                enemyLocationSnapshots.push(unitIdxByHex);
             }
 
-            this.#movementManager.setMovement(path, data.pathFov);
+            this.#movementManager.setMovement(path, data.pathFov, enemyLocationSnapshots);
             this.#unitManager.getActiveUnit().move();
             this.#pathPreviewManager.clearPathPreview();
             this.#gameInputHandler.clearHoverState();
         });
 
+        this.#eventBus.on("enemy_move", (data) => {
+            if(data.unitIdx !== this.#unitManager.unitIdx) {
+                console.log(data.unitIdx);
+                console.log(this.#unitManager.unitIdx);
+                throw new Error("Unit cannot move");
+            }
+            if(data.path.length === 0) {
+                return;
+            }
+
+            const path: Array<Hex> = [];
+            const start = this.#mapManager.getHex(
+                Hex.hashCode(data.path[0].q, data.path[0].r)
+            );
+
+            if(!start) {
+                throw new Error(`Path start is undefined`);
+            }
+                
+            for (let i = 1 ; i < data.path.length ; i++) {
+                const hex = this.#mapManager.getHex(
+                    Hex.hashCode(data.path[i].q, data.path[i].r)
+                ); 
+                if(!hex) {
+                    throw new Error(`Hex number ${i} on path is undefined`);
+                }
+                path.push(hex);   
+            }
+            const activeUnit = this.#unitManager.getActiveUnit()
+
+            if(!activeUnit.isVisible()) {
+                const [goalX, goalY] = this.#layout.hexToWorld(start);
+                activeUnit.setWorldPos(goalX, goalY);
+            }
+
+            this.#movementManager.setMovement(path);
+            activeUnit.move();
+            this.#pathPreviewManager.clearPathPreview();
+            this.#gameInputHandler.clearHoverState();
+        });
+
         this.#eventBus.on("turn_change", (nextUnitIdx) => {
-            if (nextUnitIdx < 0 || nextUnitIdx > this.#unitManager.units.length) {
-                throw new Error (`next unit id ${nextUnitIdx} is uncorrect`);
+            if(this.#unitManager.isDead(nextUnitIdx)) {
+                throw new Error("Next active unit is dead");
             }
             this.#unitManager.setUnitIdx(nextUnitIdx);
         });
@@ -150,12 +220,7 @@ export class GameActionEventHandler {
 
         this.#eventBus.on("map_shrink", (shrinklevel, deadUnits, fov) => {
             this.#mapManager.shrink(shrinklevel);
-            for (const idx of deadUnits) {
-                if (idx < 0 || idx > this.#unitManager.units.length) {
-                    throw new Error (`next unit id ${idx} is uncorrect`);
-                }
-                this.#unitManager.units[idx].die();
-            }
+            this.#unitManager.killOutOfMapUnits(deadUnits);
             this.#fovManager.setFov(fov);
         });
 

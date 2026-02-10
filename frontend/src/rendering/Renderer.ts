@@ -160,9 +160,16 @@ export class Renderer {
         const width = sprite.naturalWidth;
         const height = sprite.naturalHeight;
         const dpr = window.devicePixelRatio;
-        const [unitX, unitY] = this.#layout.worldToScreen({x: unit.x, y: unit.y})
+        const {x,y} = unit.getWorldPos();
+        if(x === undefined || y === undefined) {
+            throw new Error("unit not visible");
+        }
+        const [unitX, unitY] = this.#layout.worldToScreen({x: x, y: y})
+        
+        const alpha = unit.hasHex() ? 1 : 0.5;
 
         ctx.save();
+        ctx.globalAlpha = alpha;
         ctx.scale(dpr, dpr);
         ctx.translate(unitX, 0);
         ctx.scale(unit.direction, 1);

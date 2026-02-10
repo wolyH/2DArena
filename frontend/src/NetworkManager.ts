@@ -8,8 +8,7 @@ export class NetworkManager {
     #eventBus: EventBus<AllEvents>;
     #client: Client | undefined = undefined;
     #token: string | undefined  = undefined;
-    #currentPrivateSub: StompSubscription | undefined = undefined;
-    #currentPublicSub: StompSubscription | undefined = undefined;
+    #currentSub: StompSubscription | undefined = undefined;
 
     readonly #API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
     readonly #WS_BASE_URL = import.meta.env.VITE_WS_BASE_URL;
@@ -61,28 +60,28 @@ export class NetworkManager {
             throw Error("You must be logged in before creating a room");
         }
 
-        this.#currentPublicSub = this.#client.subscribe(`/topic/room/${roomId}`, (msg) => {
-            this.#eventBus.emit("server_notification", JSON.parse(msg.body));
-        });
+        this.#currentSub = this.#client.subscribe(`/user/queue/specific-player`,
+            (msg) => {
+                const payload = JSON.parse(msg.body);
+                if (Array.isArray(payload.notifications)) {
+                    for (const notification of payload.notifications) {
+                    this.#eventBus.emit("server_notification", notification);
+                    }
+                    return;
+                }
+                this.#eventBus.emit("server_notification", payload);
 
-        this.#currentPrivateSub = this.#client.subscribe(`/user/queue/specific-player`, 
-            (msg) => {this.#eventBus.emit("server_notification", JSON.parse(msg.body));},
+            },
             {"roomId": roomId}
         );
     }
 
     private unsubscribe(): void {
-        if(this.#currentPublicSub === undefined) {
+        if(this.#currentSub === undefined) {
             throw new Error("public channel is already undefined");
         }
-        this.#currentPublicSub.unsubscribe();
-        this.#currentPublicSub = undefined;
-
-        if(this.#currentPrivateSub === undefined) {
-             throw new Error("private channel is already undefined");
-        }
-        this.#currentPrivateSub.unsubscribe()
-        this.#currentPrivateSub = undefined;
+        this.#currentSub.unsubscribe();
+        this.#currentSub = undefined;
 
         this.#eventBus.emit("leave_room");
     }

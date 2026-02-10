@@ -54,22 +54,22 @@ export class GameRenderer {
 
         this.#renderer.drawPathPreview(this.#pathPreviewManager.pathPreview);
 
-        const units = this.#unitManager.units;
-        for (let i = 0; i < units.length; i++) {
-            const unit = units[i]
-            if (!((unit.isDead) || unit.is("Moving"))) {
+        this.#unitManager.forEachAliveUnit(unit => {
+            if (!unit.is("Moving")) {
                 const isAlly = unit.player === this.#roomState.username;
-                const isCurrent = this.#unitManager.getActiveUnit().hex.equals(unit.hex);
-                this.#renderer.drawUnitAura(unit.hex, isAlly, isCurrent);
+                const isCurrent = this.#unitManager.unitIdx == unit.idx;
+                if(unit.isVisible()) {
+                    this.#renderer.drawUnitAura(unit.hex, isAlly, isCurrent);
+                }
             }
-        }
+        });
 
-        for (let i = 0; i < units.length; i++) {
-            const unit = units[i]
-            if (!(unit.isDead && unit.is("Idle"))) {
+        this.#unitManager.forEachAliveUnit(unit => {
+            const unitPos = unit.getWorldPos();
+            if(unitPos.x !== undefined && unitPos.y !== undefined) {
                 this.#renderer.drawUnit(unit);
             }
-        }
+        });
     }
 
     invalidateMapCache(): void {
