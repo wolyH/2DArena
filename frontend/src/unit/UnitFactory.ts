@@ -9,11 +9,11 @@ export class UnitFactory {
         this.#assetmanager = assetmanager;
     }
 
-    createAlly(hex: Hex, x: number, y: number, username: string, idx: number, speed: number = 120): Unit {
+    createAlly(hex: Hex, x: number, y: number, username: string, idx: number, speed: number = 150): Unit {
         return this.createUnit(hex, x, y, speed, username, idx, "black",);
     }
 
-    createEnemy(hex: Hex | undefined, x: number  | undefined, y: number  | undefined, username: string, idx: number, speed: number = 160): Unit {
+    createEnemy(hex: Hex | undefined, x: number  | undefined, y: number  | undefined, username: string, idx: number, speed: number = 150): Unit {
         return this.createUnit(hex, x, y, speed, username, idx, "black");
     }
 

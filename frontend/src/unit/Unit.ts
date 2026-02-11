@@ -31,7 +31,7 @@ export class Unit {
     #spriteIdx: number;
     #sprites: Record<UnitAction, Array<HTMLImageElement>>;
     #frameCounter: number;
-    static readonly #ANIMATION_SPEED = 15;
+    static readonly #ANIMATION_SPEED = 10;
 
     constructor(
         hex: Hex | undefined,

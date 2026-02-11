@@ -83,32 +83,36 @@ export class Game {
 
     //Main game loop
     private loop = (currentTime: number = 0): void => {
-
         const elapsed = currentTime - this.#previousTime;
 
-        if (elapsed < this.#targetFrameTime) {
-            requestAnimationFrame(this.loop);
-            return;
-        }
+        if (elapsed >= this.#targetFrameTime) {
+            this.#previousTime = currentTime - (elapsed % this.#targetFrameTime);
+            const delta = this.#targetFrameTime / 1000;
 
-        this.#previousTime = currentTime - (elapsed % this.#targetFrameTime);
-        const delta = this.#targetFrameTime / 1000;
+            switch (this.#uiManager.state) {
+                case "MENU":
+                    this.#notificationManager.process();
+                    break;
+                case "GAME":
+                    if (this.#unitManager.getActiveUnit().is("Idle")) {
+                        this.#notificationManager.process();
+                    }
+                    this.updateGame(delta);
+                    break;
+            }
+        }
 
         this.#gameRenderer.clear();
         switch (this.#uiManager.state) {
             case "MENU":
-                this.#notificationManager.process();
                 this.#gameRenderer.drawUi();
                 break;
             case "GAME":
-                if(this.#unitManager.getActiveUnit().is("Idle")) {
-                    this.#notificationManager.process();
-                }
-                this.updateGame(delta);
                 this.#gameRenderer.drawGame();
                 this.#gameRenderer.drawUi();
                 break;
         }
+
         requestAnimationFrame(this.loop);
     }
 

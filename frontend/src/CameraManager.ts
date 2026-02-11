@@ -7,7 +7,7 @@ export class CameraManager {
 
     readonly #camera = {up: false, down: false, left: false, right: false};
 
-    static readonly #CAMERA_SPEED = 40;
+    static readonly #CAMERA_SPEED = 300;
     
     constructor(
         gameRenderer: GameRenderer,
