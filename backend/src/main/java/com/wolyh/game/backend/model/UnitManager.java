@@ -90,7 +90,6 @@ public class UnitManager {
         for (int i = 1 ; i < units.length ; i++) {
             int nextIdx = (unitIdx + i) % units.length;
             if (!units[nextIdx].isDead()) {
-                System.out.println(nextIdx);
                 unitIdx = nextIdx;
                 break;
             }

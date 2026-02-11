@@ -35,6 +35,7 @@ export class Game {
 
     #previousTime: number = 0;
 
+    //Here 60 frame per second is one frame every 1000/60 milliseconds
     readonly #targetFrameTime = 1000 / 60;
 
     constructor (
@@ -159,14 +160,17 @@ export class Game {
         const newY = isTooClose ? goalY : y + (dy / distance) * unit.speed * delta;
         unit.setWorldPos(newX, newY);
 
-        const [preQ, prevR, prevS] = this.#layout.worldToHex({x: x, y: y});
+        const [preQ, prevR] = this.#layout.worldToHex({x: x, y: y});
         const prevAdjacentHex = this.#mapManager.getHex(Hex.hashCode(preQ, prevR));
 
-        const [newQ, newR, newS] = this.#layout.worldToHex({x: newX, y: newY});
+        const [newQ, newR] = this.#layout.worldToHex({x: newX, y: newY});
         const newAdjacentHex = this.#mapManager.getHex(Hex.hashCode(newQ, newR));
 
-        if (prevAdjacentHex === undefined || newAdjacentHex === undefined) {
-            throw new Error("unit not on map");
+        if (prevAdjacentHex === undefined) {
+            throw new Error("Unit not on map");
+        }
+        if(newAdjacentHex === undefined) {
+            throw new Error("Unit going out of the map map");
         }
 
         if(!isGoalVisible) {

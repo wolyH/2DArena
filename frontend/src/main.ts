@@ -43,12 +43,14 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML =
 const width = window.innerWidth;
 const height = window.innerHeight;
 
-//Divide hex horizontal size by 2 to give an isometric look
 const n = 4;
 
 const origin = {x: width / 2, y: height / 2};
 
-const layout = new Layout(origin, {x: 100, y: 50}, n);
+const hexWidth = Math.min(width, height);
+
+//Here we divide hex vertical size by 2 to give an isometric look
+const layout = new Layout(origin, {x: hexWidth/13, y: hexWidth/26}, n);
 
 const eventBus = createEventBus<AllEvents>();
 
