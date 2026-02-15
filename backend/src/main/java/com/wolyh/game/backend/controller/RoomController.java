@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.wolyh.game.backend.dto.Notification;
+import com.wolyh.game.backend.dto.Notification.RoomEvent;
 import com.wolyh.game.backend.dto.RoomResponses;
 import com.wolyh.game.backend.dto.RoomResponses.CreateRoom;
 import com.wolyh.game.backend.dto.RoomResponses.JoinRoom;
@@ -53,7 +54,7 @@ public class RoomController {
             return ResponseEntity.badRequest().build();
         }
 
-        sendIfNotNullToUser(result.username(), result.playerLeaveNotif(), result.gameOverNotif());
+        sentToUser(result.userNotified(), roomId, result.notification());
         return ResponseEntity.ok().build();
     }
 
@@ -67,7 +68,7 @@ public class RoomController {
             return ResponseEntity.badRequest().build();
         }
 
-        sendIfNotNullToUser(result.username(), result.notification());
+        sentToUser(result.userNotified(), roomId, result.notification());
         return ResponseEntity.ok(result.response());
     }
 
@@ -88,16 +89,19 @@ public class RoomController {
             return ResponseEntity.badRequest().build();
         }
 
-        sendIfNotNullToUser(result.username(), result.notification());
+        sentToUser(result.userNotified(), roomId, result.notification());
         return ResponseEntity.ok(result.response());
     }
 
-    private void sendIfNotNullToUser(String username, Notification<?> ...notifications) {
-        String destination = "/queue/specific-player";
-        for(Notification<?> notification : notifications) {
-            if (notification != null && username != null) {
-                messagingTemplate.convertAndSendToUser(username, destination, notification);
-            }
+
+    private void sentToUser(String username, String roomId, Notification<RoomEvent> notification) {
+        if (username == null || notification == null) {
+            return;
         }
+        messagingTemplate.convertAndSendToUser(
+            username,
+            "/queue/" + roomId,
+            notification
+        );
     }
 }

@@ -1,14 +1,14 @@
-import type { MapManager } from "../MapManager";
-import { Hex } from "../Hex";
-import type { Layout } from "../Layout";
-import type { RoomState } from "../RoomState";
-import type { Unit } from "./Unit";
-import type { UnitFactory } from "./UnitFactory";
-import type { FovManager } from "../FovManager";
+import type { MapManager } from "./MapManager";
+import type { RoomState } from "./RoomState";
+import type { Unit } from "./model/Unit";
+import type { UnitFactory } from "./utils/UnitFactory";
+import type { FovManager } from "./FovManager";
+import { Hex } from "./model/Hex";
+import type { LayoutManager } from "./LayoutManager";
 
 export class UnitManager {
     readonly #mapManager: MapManager;
-    readonly #layout: Layout;
+    readonly #layoutManager: LayoutManager;
     readonly #factory: UnitFactory;
     readonly #fovManager: FovManager;
     readonly #roomState: RoomState;
@@ -18,13 +18,13 @@ export class UnitManager {
 
     constructor(
         mapManager: MapManager,
-        layout: Layout,
+        layoutManager: LayoutManager,
         factory: UnitFactory,
         fovManager: FovManager,
         roomState: RoomState,
     ) {
         this.#mapManager = mapManager;
-        this.#layout = layout;
+        this.#layoutManager = layoutManager;
         this.#factory = factory;
         this.#fovManager = fovManager;
         this.#roomState = roomState;
@@ -63,9 +63,9 @@ export class UnitManager {
         const hex2 = this.#mapManager.getHex(Hex.hashCode(this.#mapManager.n-1, 0))!;
         const hex3 = this.#mapManager.getHex(Hex.hashCode(this.#mapManager.n-2, 0))!;
 
-        const [x1, y1] = this.#layout.hexToWorld(hex1);
-        const [x2, y2] = this.#layout.hexToWorld(hex2);
-        const [x3, y3] = this.#layout.hexToWorld(hex3);
+        const [x1, y1] = this.#layoutManager.hexToWorld(hex1);
+        const [x2, y2] = this.#layoutManager.hexToWorld(hex2);
+        const [x3, y3] = this.#layoutManager.hexToWorld(hex3);
 
         if(player1 === this.#roomState.username && player2 === this.#roomState.opponent) {
             const unit1 = this.#factory.createAlly(hex1, x1, y1, player1, 0);
@@ -115,7 +115,7 @@ export class UnitManager {
             }
 
             if (hex.unit === undefined) {
-                const [x, y] = this.#layout.hexToWorld(hex);
+                const [x, y] = this.#layoutManager.hexToWorld(hex);
                 unit.setWorldPos(x, y);
                 unit.setHex(hex);
             }

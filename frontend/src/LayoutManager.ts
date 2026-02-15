@@ -1,4 +1,4 @@
-import { Hex } from "./Hex.ts"
+import { Hex } from "./model/Hex";
 
 export interface Point2D {
     x: number;
@@ -6,7 +6,7 @@ export interface Point2D {
 }
 
 //Uses the pointy top orientation
-export class Layout {
+export class LayoutManager {
     #origin: Point2D;
     #size: Point2D;
     #cameraOffset: Point2D;
@@ -27,9 +27,9 @@ export class Layout {
     //In multiples of 60° (0.5 for pointy top hex orientation)
     private readonly startAngle = 0.5;
 
-    constructor(origin: Point2D, size: Point2D, n: number) {
+    constructor(origin: Point2D, sizeX: number, n: number) {
         this.#origin = origin;
-        this.#size = size;
+        this.#size = {x: sizeX, y: sizeX / 2};
         this.#n = n;
         this.#cameraOffset = {x:0, y:0};
     }

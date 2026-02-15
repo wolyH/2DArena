@@ -1,14 +1,15 @@
-import type { EventBus } from "../utils.ts"
-import { Ui } from "./Ui";
-import { LoginUi } from "./LoginUi";
-import { StartUi } from "./StartUi.ts";
-import { BrowserUi } from "./BrowserUi.ts";
-import { EndUi } from "./EndUi.ts";
-import { GameUi } from "./GameUi.ts";
-import { RoomUi } from "./RoomUi.ts";
-import type { UiButton } from "./UiButton.ts";
-import type { RoomResponses } from "../dto/RoomResponses.ts";
-import type { AllEvents } from "../event/events.ts";
+import type { RoomResponses } from "./dto/RoomResponses";
+import type { AllEvents } from "./event/events";
+import { BrowserUi } from "./ui/BrowserUi";
+import { EndUi } from "./ui/EndUi";
+import { GameUi } from "./ui/GameUi";
+import { LoginUi } from "./ui/LoginUi";
+import { RoomUi } from "./ui/RoomUi";
+import { StartUi } from "./ui/StartUi";
+import type { Ui } from "./ui/Ui";
+import type { UiButton } from "./ui/UiButton";
+import type { EventBus } from "./utils/EvenBus";
+
 
 export class UiManager {
     #currentUi: Ui;

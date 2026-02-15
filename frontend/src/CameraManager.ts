@@ -1,20 +1,21 @@
-import type { Layout } from "./Layout";
+
+import type { LayoutManager } from "./LayoutManager";
 import type { GameRenderer } from "./rendering/GameRenderer";
 
 export class CameraManager {
     readonly #gameRenderer: GameRenderer;
-    readonly #layout: Layout;
+    readonly #layoutManager: LayoutManager;
 
     readonly #camera = {up: false, down: false, left: false, right: false};
 
-    static readonly #CAMERA_SPEED = 300;
+    static readonly #CAMERA_SPEED = 1000;
     
     constructor(
         gameRenderer: GameRenderer,
-        layout: Layout
+        layoutManager: LayoutManager
     ) {
         this.#gameRenderer = gameRenderer;
-        this.#layout = layout;
+        this.#layoutManager = layoutManager;
     }
 
     setCameraDirection(direction: 'up' | 'down' | 'left' | 'right', isPressed: boolean): void {
@@ -45,7 +46,7 @@ export class CameraManager {
         const offsetX = (xorX / length) * cameraSpeed;
         const offsetY = (xorY / length) * cameraSpeed;
 
-        if (this.#layout.updateCameraOffset(offsetX, offsetY)) {
+        if (this.#layoutManager.updateCameraOffset(offsetX, offsetY)) {
             this.#gameRenderer.invalidateMapCache();
         }
     }

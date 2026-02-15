@@ -1,31 +1,27 @@
 import { InputHandler } from "./InputHandler";
 import { MapManager } from "../MapManager";
-import { Layout } from "../Layout";
-import { UiManager } from "../ui/UiManager";
-import type { EventBus } from "../utils";
-import { Hex } from "../Hex";
 import type { AllEvents } from "../event/events";
 import type { GameRenderer } from "../rendering/GameRenderer";
-import type { FovManager } from "../FovManager";
+import type { EventBus } from "../utils/EvenBus";
+import { Hex } from "../model/Hex";
+import type { UiManager } from "../UiManager";
+import type { LayoutManager } from "../LayoutManager";
 
 export class GameInputHandler  extends InputHandler {
-    readonly #layout: Layout;
+    readonly #layoutManager: LayoutManager;
     readonly #mapManager: MapManager;
-    readonly #fovManager: FovManager;
 
     #lastHoveredHex?: string;
 
     constructor(
         mapManager: MapManager,
-        fovManager: FovManager,
         gameRenderer: GameRenderer, 
-        layout: Layout, 
+        layoutManager: LayoutManager, 
         ui: UiManager, 
         eventBus: EventBus<AllEvents>
     ) {
         super(gameRenderer, ui, eventBus);
-        this.#layout = layout;
-        this.#fovManager = fovManager;
+        this.#layoutManager = layoutManager;
         this.#mapManager = mapManager;
     }
 
@@ -64,7 +60,7 @@ export class GameInputHandler  extends InputHandler {
         }
 
         const hex = this.getHexFromEvent(event);
-        if (hex && this.#fovManager.isVisible(hex)) {
+        if (hex) {
             this.eventBus.emit("hex_clicked", hex);
         }
     };
@@ -96,7 +92,7 @@ export class GameInputHandler  extends InputHandler {
     private getHexFromEvent(event: MouseEvent): Hex | undefined {
         const rect = this.gameRenderer.getGameCanvasOffset();
 
-        const [q,r,_] = this.#layout.screenToHex({
+        const [q,r,_] = this.#layoutManager.screenToHex({
                 x: event.clientX - rect.x, 
                 y: event.clientY - rect.y
             });

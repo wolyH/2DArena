@@ -1,11 +1,14 @@
-import type { EventBus } from "./utils.ts";
 import type { AllEvents } from "./event/events.ts";
 import { Client, type StompSubscription } from "@stomp/stompjs";
 import type { AuthResponse } from "./dto/AuthResponse.ts";
 import type { RoomResponses } from "./dto/RoomResponses.ts";
+import { RoomState } from "./RoomState.ts";
+import type { EventBus } from "./utils/EvenBus.ts";
 
 export class NetworkManager {
     #eventBus: EventBus<AllEvents>;
+    #roomState: RoomState;
+
     #client: Client | undefined = undefined;
     #token: string | undefined  = undefined;
     #currentSub: StompSubscription | undefined = undefined;
@@ -13,8 +16,9 @@ export class NetworkManager {
     readonly #API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
     readonly #WS_BASE_URL = import.meta.env.VITE_WS_BASE_URL;
 
-    constructor(eventBus: EventBus<AllEvents>) {
+    constructor(eventBus: EventBus<AllEvents>, roomState: RoomState) {
         this.#eventBus = eventBus;
+        this.#roomState = roomState;
     }
 
     async login(username: string): Promise<void> {
@@ -60,19 +64,19 @@ export class NetworkManager {
             throw Error("You must be logged in before creating a room");
         }
 
-        this.#currentSub = this.#client.subscribe(`/user/queue/specific-player`,
+        this.#currentSub = this.#client.subscribe(`/user/queue/${roomId}`,
             (msg) => {
                 const payload = JSON.parse(msg.body);
-                if (Array.isArray(payload.notifications)) {
-                    for (const notification of payload.notifications) {
+                if (Array.isArray(payload)) {
+                    for (const notification of payload) {
                     this.#eventBus.emit("server_notification", notification);
                     }
                     return;
                 }
+
                 this.#eventBus.emit("server_notification", payload);
 
             },
-            {"roomId": roomId}
         );
     }
 
@@ -150,14 +154,14 @@ export class NetworkManager {
         }
     }
 
-    sendGameAction(roomId: string, payload: any, destination: string): void {
+    sendGameAction(destination: string, payload?: any): void {
         if (!this.#client) {
             throw Error("You must be logged in to send a game action");
         }
 
         this.#client.publish({
-            destination: `/app/room/${roomId}/${destination}`,
-            body: JSON.stringify(payload)
+            destination: `/app/room/${this.#roomState.room.roomId}/${destination}`,
+            body: payload ? JSON.stringify(payload) : "{}"
         });
     }
 }

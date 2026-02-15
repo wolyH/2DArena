@@ -1,10 +1,10 @@
 import type { MapManager } from "../MapManager";
-import { Hex } from "../Hex";
-import type { Layout } from "../Layout";
 import type { UiButton } from "../ui/UiButton";
 import type { UiText } from "../ui/UiText";
-import type { Unit } from "../unit/Unit";
+import type { Unit } from "../model/Unit";
 import type { FovManager } from "../FovManager";
+import { Hex } from "../model/Hex";
+import type { LayoutManager } from "../LayoutManager";
 
 export class Renderer {
     readonly gameCanvas: HTMLCanvasElement;
@@ -16,23 +16,24 @@ export class Renderer {
     readonly #mapCacheCanvas: HTMLCanvasElement;
     readonly #mapCacheCtx: CanvasRenderingContext2D;
 
-    readonly #layout: Layout;
+    readonly #layoutManager: LayoutManager;
     readonly #mapManager: MapManager;
     readonly #fovManager: FovManager;
     readonly background: string;
 
     static readonly DEFAULT_BACKGROUND_FILL_COLOR = "#282118ff";
-    static readonly DEFAULT_LINE_WIDTH = 2;
-    static readonly DEFAULT_HEX_DEPTH = 30;
+    static readonly DEFAULT_LINE_WIDTH = 3.5;
+    static readonly DEFAULT_HEX_DEPTH = 35;
     static readonly DEFAULT_DEPTH_FILL_COLOR = "#161717ff";
     static readonly DEFAULT_DEPTH_STROKE_COLOR = Renderer.DEFAULT_DEPTH_FILL_COLOR;
     //Here UNIT_OFFSET_RATIO is a magic offset number to center vertically the unit on the mapManager
     static readonly #UNIT_OFFSET_RATIO = 5 / 6;
 
     static readonly PATH_WIDTH = 20;
+    static readonly AURA_WIDTH = 13;
 
-    constructor(mapManager: MapManager, layout: Layout, fovManager: FovManager) {
-        this.#layout = layout;
+    constructor(mapManager: MapManager, layoutManager: LayoutManager, fovManager: FovManager) {
+        this.#layoutManager = layoutManager;
         this.#mapManager = mapManager;
         this.#fovManager = fovManager;
 
@@ -95,7 +96,7 @@ export class Renderer {
         //Hex Top surface drawing
         const outline = new Path2D();
         for (const h of this.#mapManager.getMap()) {
-            const corners = this.#layout.findCorners(h);
+            const corners = this.#layoutManager.findCorners(h);
             ctx.beginPath();
             ctx.moveTo(corners[0].x, corners[0].y);
 
@@ -114,8 +115,8 @@ export class Renderer {
 
             outline.closePath();
         }
-
-        ctx.lineWidth = Renderer.DEFAULT_LINE_WIDTH;
+        const scale = this.#layoutManager.getSizeX() / 100; 
+        ctx.lineWidth = Renderer.DEFAULT_LINE_WIDTH * scale;
         ctx.strokeStyle = Hex.DEFAULT_STROKE_COLOR;
         ctx.stroke(outline);
 
@@ -126,11 +127,12 @@ export class Renderer {
         const ctx = this.#mapCacheCtx;
         //Here the outline has the same color has the inner shape (the hex) 
         //to compensate for the outline of the top surface (the mapManager) that makes each hex 0.5p bigger
-        const depth = Renderer.DEFAULT_HEX_DEPTH;
+        const scale = this.#layoutManager.getSizeX() / 100; 
+        const depth = Renderer.DEFAULT_HEX_DEPTH * scale;
         const outline = new Path2D();
         //Depth drawing
         for (const h of this.#mapManager.getMap()) {
-            const corners = this.#layout.findCorners(h);
+            const corners = this.#layoutManager.findCorners(h);
 
             outline.moveTo(corners[1].x,corners[1].y);
             outline.lineTo(corners[1].x,corners[1].y + depth);
@@ -149,7 +151,7 @@ export class Renderer {
             ctx.fillStyle = Renderer.DEFAULT_DEPTH_FILL_COLOR;
             ctx.fill();
         }
-        ctx.lineWidth = Renderer.DEFAULT_LINE_WIDTH;
+        ctx.lineWidth = Renderer.DEFAULT_LINE_WIDTH * scale;
         ctx.strokeStyle = Renderer.DEFAULT_DEPTH_STROKE_COLOR;
         ctx.stroke(outline);
     }
@@ -164,17 +166,23 @@ export class Renderer {
         if(x === undefined || y === undefined) {
             throw new Error("unit not visible");
         }
-        const [unitX, unitY] = this.#layout.worldToScreen({x: x, y: y})
+        const [unitX, unitY] = this.#layoutManager.worldToScreen({x: x, y: y})
         
         const alpha = unit.hasHex() ? 1 : 0.5;
-        const scale = this.#layout.getSizeX() / 100; 
+        const scale = this.#layoutManager.getSizeX() / 100; 
 
         ctx.save();
         ctx.globalAlpha = alpha;
         ctx.scale(dpr, dpr);
         ctx.translate(unitX, 0);
         ctx.scale(unit.direction, 1);
-        ctx.drawImage(sprite, -width / 2 * scale, unitY - Renderer.#UNIT_OFFSET_RATIO * height * scale, width * scale, height * scale);
+        ctx.drawImage(
+            sprite, 
+            -width / 2 * scale, 
+            unitY - Renderer.#UNIT_OFFSET_RATIO * height * scale,
+            width * scale, 
+            height * scale
+        );
 
         ctx.restore();
     }
@@ -183,18 +191,20 @@ export class Renderer {
         const ctx = this.gameCtx;
         const dpr = window.devicePixelRatio;
 
-        const paddingX = 7;
-        const paddingY = 7;
-        const radiusX = this.#layout.getSizeX();
-        const radiusY = this.#layout.getSizeY();
+        const scale = this.#layoutManager.getSizeX() / 100;
+
+        const paddingX = 7 * scale;
+        const paddingY = 7 * scale;
+        const radiusX = this.#layoutManager.getSizeX();
+        const radiusY = this.#layoutManager.getSizeY();
         const scaleX = (radiusX - paddingX) / radiusX;
         const scaleY = (radiusY - paddingY) / radiusY;
         
         ctx.save();
         ctx.scale(dpr, dpr);
 
-        const [centerX, centerY] = this.#layout.hexToScreen(hex);
-        const corners = this.#layout.findCorners(hex);
+        const [centerX, centerY] = this.#layoutManager.hexToScreen(hex);
+        const corners = this.#layoutManager.findCorners(hex);
 
         ctx.beginPath();
 
@@ -211,7 +221,7 @@ export class Renderer {
 
         ctx.closePath();
         ctx.strokeStyle = isAlly ? (isCurrent ? "green" : "purple") : (isCurrent ? "red" : "grey");
-        ctx.lineWidth = 9.5;
+        ctx.lineWidth = Renderer.AURA_WIDTH * scale;
         ctx.stroke();
 
         ctx.restore();
@@ -234,9 +244,10 @@ export class Renderer {
 
         const ellipsePath = new Path2D();
         const linePath = new Path2D();
+        const scale = this.#layoutManager.getSizeX() / 100;
 
         for (let i = 0 ; i < path.length ; i++) {
-            const [x, y] = this.#layout.hexToScreen(path[i]);
+            const [x, y] = this.#layoutManager.hexToScreen(path[i]);
             if(i === 0) {
                 linePath.moveTo(x, y);
             }
@@ -245,11 +256,11 @@ export class Renderer {
             }
 
             ellipsePath.moveTo(x, y);
-            ellipsePath.ellipse(x, y, Renderer.PATH_WIDTH, 0.5 * Renderer.PATH_WIDTH, 0, 0, 2 * Math.PI);
+            ellipsePath.ellipse(x, y, Renderer.PATH_WIDTH * scale, 0.5 * Renderer.PATH_WIDTH * scale, 0, 0, 2 * Math.PI);
         }
 
         //Draw the line
-        ctx.lineWidth =  Renderer.PATH_WIDTH;
+        ctx.lineWidth =  Renderer.PATH_WIDTH * scale;
         ctx.lineJoin = 'round';
         ctx.strokeStyle = lineFillColor;
         ctx.stroke(linePath);

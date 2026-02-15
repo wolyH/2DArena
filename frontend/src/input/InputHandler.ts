@@ -1,8 +1,8 @@
-import { UiManager } from "../ui/UiManager";
 import { UiButton } from "../ui/UiButton";
-import type { EventBus } from "../utils";
 import type { AllEvents } from "../event/events";
 import type { GameRenderer } from "../rendering/GameRenderer";
+import type { EventBus } from "../utils/EvenBus";
+import type { UiManager } from "../UiManager";
 
 export abstract class InputHandler {
     protected readonly gameRenderer: GameRenderer;

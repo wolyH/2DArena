@@ -1,29 +1,30 @@
 import './style.css';
 import { Game} from './Game.ts';
-import { Layout } from './Layout.ts';
-import { AssetManager } from './utils.ts';
+import { LayoutManager } from './LayoutManager.ts';
 import { MapManager } from './MapManager.ts';
-import { createEventBus } from './utils.ts';
 import { GameInputHandler } from './input/GameInputHandler.ts';
 import { MenuInputHandler } from './input/MenuInputHandler.ts';
-import { UiManager } from './ui/UiManager.ts';
 import { NetworkManager } from './NetworkManager.ts';
 import { CameraManager } from './CameraManager.ts';
 import { FovManager } from './FovManager.ts';
 import { RoomState } from './RoomState.ts';
-import { UnitManager } from './unit/UnitManager.ts';
+import { UnitManager } from './UnitManager.ts';
 import { GameActionEventHandler } from './event/handler/GameActionEventHandler.ts';
 import { InputEventHandler } from './event/handler/InputEventHandler.ts';
 import { MenuEventHandler } from './event/handler/MenuEventHandler.ts';
 import { NotificationEventHandler } from './event/handler/NotificationEventHandler.ts';
 import type { AllEvents } from './event/events.ts';
 import { PathPreviewManager } from './PathPreviewManager.ts';
-import { GameScreenEventHandler } from './event/handler/GameScreenEventHandler.ts';
+import { RenderingEventHandler } from './event/handler/RenderingEventHandler.ts';
 import { Renderer } from './rendering/Renderer.ts';
 import { GameRenderer } from './rendering/GameRenderer.ts';
-import { UnitFactory } from './unit/UnitFactory.ts';
-import { MovementManager } from './MovementManager.ts';
+import { UnitFactory } from './utils/UnitFactory.ts';
 import { NotificationManager } from './NotificationManager.ts';
+import { MovementManager } from './MovementManager.ts';
+import { AssetManager } from './utils/AssetManager.ts';
+import { createEventBus } from './utils/EvenBus.ts';
+import { UiManager } from './UiManager.ts';
+import { MovementState } from './MovementState.ts';
 
 const assetManager = new AssetManager();
 
@@ -50,7 +51,7 @@ const origin = {x: width / 2, y: height / 2};
 const hexWidth = Math.min(width, height);
 
 //Here we divide hex vertical size by 2 to give an isometric look
-const layout = new Layout(origin, {x: hexWidth/13, y: hexWidth/26}, n);
+const layoutManager = new LayoutManager(origin, hexWidth/13, n);
 
 const eventBus = createEventBus<AllEvents>();
 
@@ -60,7 +61,7 @@ const fovManager = new FovManager(eventBus);
 
 const renderer = new Renderer(
     mapManager, 
-    layout,
+    layoutManager,
     fovManager
 );
 
@@ -68,24 +69,32 @@ const uiManager = new UiManager(eventBus);
 
 const unitFactory = new UnitFactory(assetManager);
 
-const networkManager = new NetworkManager(eventBus);
-
 const roomState = new RoomState();
+
+const networkManager = new NetworkManager(eventBus, roomState);
 
 const pathPreviewManager = new PathPreviewManager(
     mapManager, 
     fovManager
 );
 
-const movementManager = new MovementManager()
+const movementState = new MovementState();
 
 const unitManager = new UnitManager(
     mapManager,
-    layout,
+    layoutManager,
     unitFactory,
     fovManager,
     roomState
 );
+
+const movementManager = new MovementManager(
+    unitManager,
+    movementState,
+    layoutManager,
+    fovManager,
+    mapManager
+)
 
 const gameRenderer = new GameRenderer(
     renderer, 
@@ -97,9 +106,8 @@ const gameRenderer = new GameRenderer(
 
 const gameInputHandler = new GameInputHandler(
     mapManager,
-    fovManager,
     gameRenderer, 
-    layout, 
+    layoutManager, 
     uiManager, 
     eventBus
 );
@@ -111,7 +119,7 @@ const menuInputHandler = new MenuInputHandler(
 
 const cameraManager = new CameraManager(
     gameRenderer, 
-    layout
+    layoutManager
 );
 
 const notificationManager = new NotificationManager(
@@ -128,13 +136,13 @@ const gameActionEventHandler = new GameActionEventHandler(
     menuInputHandler, 
     unitManager, 
     pathPreviewManager,
-    movementManager,
+    movementState,
     fovManager,
-    layout,
+    layoutManager,
     roomState
 );
 
-const gameScreenEventHandler = new GameScreenEventHandler(
+const renderingEventHandler = new RenderingEventHandler(
     eventBus,
     gameRenderer
 )
@@ -142,13 +150,12 @@ const gameScreenEventHandler = new GameScreenEventHandler(
 const inputEventHandler = new InputEventHandler(
     eventBus, 
     uiManager, 
-    layout, 
+    layoutManager, 
     gameInputHandler, 
     unitManager,
     cameraManager,
     pathPreviewManager,
-    fovManager,
-    roomState
+    fovManager
 );
 
 const menuEventHandler = new MenuEventHandler(
@@ -172,20 +179,18 @@ const notificationEventHandler = new NotificationEventHandler(
 
 const game = new Game(
   gameActionEventHandler,
-  gameScreenEventHandler,
+  renderingEventHandler,
   inputEventHandler,
   menuEventHandler,
   notificationEventHandler,
   menuInputHandler,
   gameRenderer,
+  layoutManager,
   uiManager,
   cameraManager,
   unitManager,
   movementManager,
-  layout,
-  mapManager,
   notificationManager,
-  fovManager
 );
 
 game.start();

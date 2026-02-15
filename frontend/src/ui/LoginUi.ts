@@ -1,7 +1,7 @@
 import { Ui } from "./Ui";
 import { UiButton } from "./UiButton.ts";
-import type { EventBus } from "../utils.ts"
 import type { AllEvents } from "../event/events.ts";
+import type { EventBus } from "../utils/EvenBus.ts";
 
 export class LoginUi extends Ui {
     constructor(eventBus: EventBus<AllEvents>) {

@@ -31,7 +31,7 @@ export class RoomState {
         if (!this.#room) {
             throw new Error("Room not set");
         }
-        return this.#room.opponent ? true : false;
+        return this.#room.opponent !== undefined;
     }
 
     get opponent(): string {

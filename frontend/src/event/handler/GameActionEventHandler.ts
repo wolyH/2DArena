@@ -1,17 +1,17 @@
 import type { MapManager } from "../../MapManager";
-import { Hex } from "../../Hex";
+import { Hex } from "../../model/Hex";
 import type { GameInputHandler } from "../../input/GameInputHandler";
 import type { MenuInputHandler } from "../../input/MenuInputHandler";
 import type { NetworkManager } from "../../NetworkManager";
 import type { RoomState } from "../../RoomState";
-import type { UiManager } from "../../ui/UiManager";
-import type { UnitManager } from "../../unit/UnitManager";
-import type { EventBus } from "../../utils";
+import type { UnitManager } from "../../UnitManager";
 import type { AllEvents } from "../events";
-import type { MovementManager } from "../../MovementManager";
 import type { PathPreviewManager } from "../../PathPreviewManager";
 import type { FovManager } from "../../FovManager";
-import type { Layout } from "../../Layout";
+import type { EventBus } from "../../utils/EvenBus";
+import type { UiManager } from "../../UiManager";
+import type { MovementState } from "../../MovementState";
+import type { LayoutManager } from "../../LayoutManager";
 
 export class GameActionEventHandler {
     readonly #eventBus: EventBus<AllEvents>;
@@ -22,9 +22,9 @@ export class GameActionEventHandler {
     readonly #menuInputHandler: MenuInputHandler;
     readonly #unitManager: UnitManager;
     readonly #pathPreviewManager: PathPreviewManager
-    readonly #movementManager: MovementManager;
+    readonly #movementState: MovementState ;
     readonly #fovManager: FovManager;
-    readonly #layout: Layout;
+    readonly #layoutManager: LayoutManager;
     readonly #roomState: RoomState;
 
     constructor(
@@ -36,9 +36,9 @@ export class GameActionEventHandler {
         menuInputHandler: MenuInputHandler,
         unitManager: UnitManager,
         pathPreviewManager: PathPreviewManager,
-        movementManager: MovementManager,
+        movementManager: MovementState ,
         fovManager: FovManager,
-        layout: Layout,
+        layoutManager: LayoutManager,
         roomState: RoomState,
     ) {
         this.#eventBus = eventBus;
@@ -49,9 +49,9 @@ export class GameActionEventHandler {
         this.#menuInputHandler = menuInputHandler;
         this.#unitManager = unitManager;
         this.#pathPreviewManager = pathPreviewManager;
-        this.#movementManager = movementManager;
+        this.#movementState = movementManager;
         this.#fovManager = fovManager;
-        this.#layout = layout;
+        this.#layoutManager = layoutManager;
         this.#roomState = roomState;
     }
 
@@ -64,9 +64,8 @@ export class GameActionEventHandler {
             };
 
             this.#networkManager.sendGameAction(
-                this.#roomState.room.roomId, 
-                payload, 
-                "unit-action"
+                "unit-action",
+                payload
             );
         });
 
@@ -114,10 +113,9 @@ export class GameActionEventHandler {
                 unitIdx: this.#unitManager.unitIdx, 
                 goal: {q: hex.q, r: hex.r}
             };
-            this.#networkManager.sendGameAction(
-                this.#roomState.room.roomId, 
-                payload, 
-                "unit-action"
+            this.#networkManager.sendGameAction(  
+                "unit-action",
+                payload
             );
         });
 
@@ -125,14 +123,14 @@ export class GameActionEventHandler {
             if(data.unitIdx !== this.#unitManager.unitIdx) {
                 throw new Error("Unit is not active");
             }
-            if (data.path.length < 2) {
-                throw new Error("Path length should be >= 2");
+            if (data.path.length < 1) {
+                throw new Error("Path length should be >= 1");
             }
 
             const path: Array<Hex> = [];
             const enemyLocationSnapshots: Array<Map<number, Hex>> = [];
 
-            for (let i = 1 ; i < data.path.length ; i++) {
+            for (let i = 0 ; i < data.path.length ; i++) {
                 const hex = this.#mapManager.getHex(
                     Hex.hashCode(data.path[i].q, data.path[i].r)
                 ); 
@@ -142,7 +140,7 @@ export class GameActionEventHandler {
                 path.push(hex);
                  
                 const unitIdxByHex: Map<number, Hex> = new Map();
-                for (const unitCoords of data.visibleUnitsAlongPath[i-1]) {
+                for (const unitCoords of data.visibleUnitsAlongPath[i]) {
                     const unitHex = this.#mapManager.getHex(
                         Hex.hashCode(unitCoords.q, unitCoords.r)
                     );
@@ -156,7 +154,7 @@ export class GameActionEventHandler {
                 enemyLocationSnapshots.push(unitIdxByHex);
             }
 
-            this.#movementManager.setMovement(path, data.pathFov, enemyLocationSnapshots);
+            this.#movementState.set(path, data.pathFov, enemyLocationSnapshots);
             this.#unitManager.getActiveUnit().move();
             this.#pathPreviewManager.clearPathPreview();
             this.#gameInputHandler.clearHoverState();
@@ -164,8 +162,6 @@ export class GameActionEventHandler {
 
         this.#eventBus.on("enemy_move", (data) => {
             if(data.unitIdx !== this.#unitManager.unitIdx) {
-                console.log(data.unitIdx);
-                console.log(this.#unitManager.unitIdx);
                 throw new Error("Unit cannot move");
             }
             if(data.path.length === 0) {
@@ -193,11 +189,11 @@ export class GameActionEventHandler {
             const activeUnit = this.#unitManager.getActiveUnit()
 
             if(!activeUnit.isVisible()) {
-                const [goalX, goalY] = this.#layout.hexToWorld(start);
+                const [goalX, goalY] = this.#layoutManager.hexToWorld(start);
                 activeUnit.setWorldPos(goalX, goalY);
             }
 
-            this.#movementManager.setMovement(path);
+            this.#movementState.set(path);
             activeUnit.move();
             this.#pathPreviewManager.clearPathPreview();
             this.#gameInputHandler.clearHoverState();
@@ -211,11 +207,13 @@ export class GameActionEventHandler {
         });
 
         this.#eventBus.on("turn_skip_requested", () => {
-            this.#networkManager.sendGameAction(
-                this.#roomState.room.roomId,  
-                this.#unitManager.unitIdx, 
-                "turn-skip"
-            );
+            const activeUnit = this.#unitManager.getActiveUnit();
+            if (activeUnit.player === this.#roomState.username && activeUnit.is("Idle")) {
+                this.#networkManager.sendGameAction(  
+                    "turn-skip",
+                    this.#unitManager.unitIdx
+                );
+            }
         });
 
         this.#eventBus.on("map_shrink", (shrinklevel, deadUnits, fov) => {
@@ -229,5 +227,9 @@ export class GameActionEventHandler {
             this.#menuInputHandler.setupEventListeners();
             this.#uiManager.showEnd(winner === this.#roomState.username);
         });
+
+        this.#eventBus.on("forfeit_game",() => {
+            this.#networkManager.sendGameAction("game-forfeit")
+        })
     }
 }

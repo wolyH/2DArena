@@ -1,4 +1,4 @@
-import type { Hex } from "../Hex";
+import type { Hex } from "./Hex";
 
 export type UnitAction = "Idle" | "Moving" | "Striking" | "Dying";
 

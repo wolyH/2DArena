@@ -1,4 +1,4 @@
-import type { Unit } from "./unit/Unit";
+import type { Unit } from "./Unit";
 
 export class Hex {
     readonly q: number;

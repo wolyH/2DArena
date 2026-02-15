@@ -1,8 +1,8 @@
 import type { NotificationManager } from "../../NotificationManager";
 import type { RoomState } from "../../RoomState";
-import type { UiManager } from "../../ui/UiManager";
-import type {EventBus } from "../../utils";
 import type { AllEvents } from "../events";
+import type { EventBus } from "../../utils/EvenBus";
+import type { UiManager } from "../../UiManager";
 
 export class NotificationEventHandler {
     readonly #eventBus: EventBus<AllEvents>;

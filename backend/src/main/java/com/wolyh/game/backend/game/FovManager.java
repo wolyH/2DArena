@@ -1,4 +1,4 @@
-package com.wolyh.game.backend.model;
+package com.wolyh.game.backend.game;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -7,57 +7,58 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import com.wolyh.game.backend.model.Hex;
+import com.wolyh.game.backend.model.HexCoordinates;
+import com.wolyh.game.backend.model.Unit;
+import com.wolyh.game.backend.model.UnitCoordinates;
+
 public class FovManager {
     private final UnitManager unitManager;
     private final MapManager mapManager;
 
     private HashMap<String, List<String>> visibilityMap = new HashMap<>();
-    private Set<String> fov1 = new HashSet<>();
-    private Set<String> fov2 = new HashSet<>();
+    private Map<String, Set<String>> playerFovs = new HashMap<>();
 
     public FovManager(
         UnitManager unitManager, 
-        MapManager mapManager
+        MapManager mapManager,
+        PlayerManager playerManager
     ) {
         this.unitManager = unitManager;
         this.mapManager = mapManager;
+
+        playerFovs.put(playerManager.getPlayer1(), new HashSet<>());
+        playerFovs.put(playerManager.getPlayer2(), new HashSet<>());
+
         this.updateVisibilityMap();
     }
 
-    public boolean isVisible(Hex hex, String username) {
-        if(username.equals(unitManager.player1)) {
-            return fov1.contains(hex.getKey());
-        }
-        if(username.equals(unitManager.player2)) {
-            return fov2.contains(hex.getKey());
-        }
-        throw new IllegalArgumentException(
-            "username must be the username of a player present in the room"
-        );
+    public void resetFov() {
+        this.updateVisibilityMap();
+        this.updateFov();
     }
 
-    public boolean isVisible(HexCoordinates hexCoords, String username) {
-        if(username.equals(unitManager.player1)) {
-            return fov1.contains(Hex.key(hexCoords.q(), hexCoords.r()));
-        }
-        if(username.equals(unitManager.player2)) {
-            return fov2.contains(Hex.key(hexCoords.q(), hexCoords.r()));
-        }
-        throw new IllegalArgumentException(
-            "username must be the username of a player present in the room"
-        );
+    public void updateFov() {
+        playerFovs.values().forEach(fov -> fov.clear());
+        unitManager.forEachAliveUnit(unit -> {
+            String player = unit.getPlayer();
+            Set<String> fov = playerFovs.get(player);
+            fov.addAll(getUnitFov(unit.getHex().getKey()));
+        });
+    }
+
+    public boolean isVisibleBy(Hex hex, String username) {
+        Set<String> fov = playerFovs.get(username);
+        return fov.contains(hex.getKey());
+    }
+
+    public boolean isVisibleBy(HexCoordinates hexCoords, String username) {
+        Set<String> fov = playerFovs.get(username);
+        return fov.contains(Hex.key(hexCoords.q(), hexCoords.r()));
     }
 
     public Set<String> getFov(String username) {
-        if(username.equals(unitManager.player1)) {
-            return new HashSet<>(fov1);
-        }
-        if(username.equals(unitManager.player2)) {
-            return new HashSet<>(fov2);
-        }
-        throw new IllegalArgumentException(
-            "username must be the username of a player present in the room"
-        );
+        return new HashSet<>(playerFovs.get(username));
     }
 
     private List<String> getUnitFov(String hexKey) {
@@ -65,16 +66,10 @@ public class FovManager {
         if (fov != null) {
             return fov;
         }
-        return List.of();
+        throw new IllegalArgumentException("Hex: " + hexKey + " not on the map ");
     }
 
     public List<Set<String>> getPathFov(List<HexCoordinates> path, String username) {
-        if(!username.equals(unitManager.player1) && !username.equals(unitManager.player2)) {
-             throw new IllegalArgumentException(
-                "username must be the username of a player present in the room"
-            );
-        }
-
         List<Set<String>> pathFov = new ArrayList<>();
         Set<String> otherFov = new HashSet<>();
 
@@ -93,24 +88,31 @@ public class FovManager {
         return pathFov;
     }
 
-
-    public void resetFov() {
-        this.updateVisibilityMap();
-        this.updateFov();
-    }
-
-    public void updateFov() {
-        fov1.clear();
-        fov2.clear();
+    public List<List<UnitCoordinates>> getVisibleUnitsAlongPath(List<Set<String>> pathPov) {
+        Map<String, UnitCoordinates> enemyUnitsByHex = new HashMap<>();
 
         unitManager.forEachAliveUnit(unit -> {
-            if(unit.getPlayer().equals(unitManager.player1)) {
-                fov1.addAll(getUnitFov(unit.getHex().getKey()));
-            }
-            if(unit.getPlayer().equals(unitManager.player2)) {
-                fov2.addAll(getUnitFov(unit.getHex().getKey()));
+            if (!unitManager.isActivePlayer(unit) && unit.getHex() != null) {
+                Hex unitHex = unit.getHex();
+                String key = Hex.key(unitHex.getQ(), unitHex.getR());
+                enemyUnitsByHex.put(key, new UnitCoordinates(unit.idx, unitHex.getQ(), unitHex.getR()));
             }
         });
+
+        List<List<UnitCoordinates>> visibleUnitsAlongPath = new ArrayList<>(pathPov.size());
+
+        for(Set<String> snapshot: pathPov) {
+            List<UnitCoordinates> visibleUnits = new ArrayList<>();
+            for (String hexKey : snapshot) {
+                UnitCoordinates unit = enemyUnitsByHex.get(hexKey);
+                if (unit != null) {
+                    visibleUnits.add(unit);
+                }
+            }
+            visibleUnitsAlongPath.add(visibleUnits);
+        }
+        
+        return visibleUnitsAlongPath;
     }
 
     private void updateVisibilityMap() {

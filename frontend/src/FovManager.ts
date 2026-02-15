@@ -1,6 +1,6 @@
+import type { Hex } from "./model/Hex";
 import type { AllEvents } from "./event/events";
-import { Hex } from "./Hex";
-import type { EventBus } from "./utils";
+import type { EventBus } from "./utils/EvenBus";
 
 export class FovManager {
     #fov: Set<string> = new Set();

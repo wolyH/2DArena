@@ -22,5 +22,5 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true
   },
-  "include": ["src"]
+  "include": ["src", "src/RoomState.ts", "src/model/MovementState.ts", "src/model/Unit.ts"]
 }

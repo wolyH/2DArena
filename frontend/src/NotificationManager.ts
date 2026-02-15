@@ -1,7 +1,7 @@
 import type { Notification } from "./dto/Notification";
 import type { AllEvents } from "./event/events";
 import type { RoomState } from "./RoomState";
-import type { EventBus } from "./utils";
+import type { EventBus } from "./utils/EvenBus";
 
 export class NotificationManager {
     #eventBus: EventBus<AllEvents>;
@@ -20,9 +20,8 @@ export class NotificationManager {
         const parsedNotification = this.parseNotification(notification);
         
         if (!parsedNotification) {
-            throw new Error("Received an unparsable message from server") ;
+            throw new Error(`Received an unparsable message from server: ${notification}`) ;
         }
-        console.log(parsedNotification);
         this.#notificationQueue.push(parsedNotification);
     }
 

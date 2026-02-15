@@ -1,8 +1,8 @@
 import type { GameRenderer } from "../../rendering/GameRenderer";
-import type { EventBus } from "../../utils";
+import type { EventBus } from "../../utils/EvenBus";
 import type { AllEvents } from "../events";
 
-export class GameScreenEventHandler {
+export class RenderingEventHandler {
     readonly #eventBus: EventBus<AllEvents>;
     readonly #gameRenderer: GameRenderer;
     
@@ -18,7 +18,7 @@ export class GameScreenEventHandler {
         this.#eventBus.on("fov_changed", () => {
             this.#gameRenderer.invalidateMapCache();
         });
-
+        
         this.#eventBus.on("map_size_changed", () => {
             this.#gameRenderer.resize();
             this.#gameRenderer.invalidateMapCache();

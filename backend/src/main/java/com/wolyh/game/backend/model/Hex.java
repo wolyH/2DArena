@@ -15,7 +15,7 @@ public class Hex {
 
     private Unit unit;
 
-    Hex(int q, int r, int s, boolean isObstacle) {
+    public Hex(int q, int r, int s, boolean isObstacle) {
         if (Math.round(q + r + s) != 0) {
             throw new IllegalArgumentException("q + r + s must be 0");
         }

@@ -1,5 +1,7 @@
 package com.wolyh.game.backend.service;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -13,76 +15,38 @@ import com.wolyh.game.backend.dto.UnitActionRequest;
 import com.wolyh.game.backend.dto.Notification;
 import com.wolyh.game.backend.dto.Notification.AllyUnitMove;
 import com.wolyh.game.backend.dto.Notification.EnemyUnitMove;
+import com.wolyh.game.backend.dto.Notification.GameEvent;
 import com.wolyh.game.backend.dto.Notification.GameOver;
 import com.wolyh.game.backend.dto.Notification.MapShrink;
 import com.wolyh.game.backend.dto.Notification.TurnChange;
 import com.wolyh.game.backend.dto.Notification.UnitAttack;
+import com.wolyh.game.backend.game.GameContext;
+import com.wolyh.game.backend.game.Result.AddGameResult;
+import com.wolyh.game.backend.game.Result.ForfeitResult;
+import com.wolyh.game.backend.game.Result.GameActionResult;
+import com.wolyh.game.backend.game.Result.ShrinkMapResult;
 import com.wolyh.game.backend.dto.Notification.Type;
-import com.wolyh.game.backend.model.FovManager;
-import com.wolyh.game.backend.model.Game;
 import com.wolyh.game.backend.model.HexCoordinates;
-import com.wolyh.game.backend.model.MapManager;
-import com.wolyh.game.backend.model.PathManager;
 import com.wolyh.game.backend.model.UnitCoordinates;
-import com.wolyh.game.backend.model.UnitManager;
-import com.wolyh.game.backend.model.Game.AttackResult;
-import com.wolyh.game.backend.model.Game.EndTurnResult;
 
 @Service
 public class GameService {
 
-    private final Map<String, Game> games = new ConcurrentHashMap<>();
+    private final Map<String, GameContext> games = new ConcurrentHashMap<>();
     private final Map<String, Lock> gameLocks = new ConcurrentHashMap<>();
 
-    public static record SkipTurnResult(
-        String activePlayer,
-        String inactivePlayer,
-        Notification<TurnChange> turnChangeNotif,
-        Notification<MapShrink> mapShrinkNotifActive,
-        Notification<MapShrink> mapShrinkNotifIncative,
-        Notification<GameOver> gameOverNotif
-    ) {}
-
-    public interface UnitActionResult {}
-
-    public static record UnitMoveResult(
-        String activePlayer,
-        String inactivePlayer,
-        Notification<AllyUnitMove> unitMoveNotifActive,
-        Notification<EnemyUnitMove> unitMoveNotifInactive,
-        Notification<TurnChange> turnChangeNotif,
-        Notification<MapShrink> mapShrinkNotifActive,
-        Notification<MapShrink> mapShrinkNotifInactive,
-        Notification<GameOver> gameOverNotif
-    ) implements UnitActionResult {}
-
-    public static record UnitAttackResult(
-        String activePlayer,
-        String inactivePlayer,
-        Notification<UnitAttack> unitAttackNotifActive,
-        Notification<UnitAttack> unitAttackNotifInactive,
-        Notification<TurnChange> turnChangeNotif,
-        Notification<MapShrink> mapShrinkNotifActive,
-        Notification<MapShrink> mapShrinkNotifInactive,
-        Notification<GameOver> gameOverNotif
-    ) implements UnitActionResult {}
-
-    public void addGame(String roomId, String player1, String player2) {
+    public AddGameResult addGame(String roomId, String player1, String player2) {
         games.computeIfAbsent(roomId, id -> {
             gameLocks.put(id, new ReentrantLock());
-            MapManager mapManager = new MapManager();
-            UnitManager unitManager = new UnitManager(mapManager, player1, player2);
-            FovManager fovManager = new FovManager(unitManager, mapManager);
-            PathManager pathManager = new PathManager(mapManager, unitManager, fovManager);
-            return new Game(
-                mapManager, 
-                unitManager, 
-                fovManager, 
-                pathManager, 
-                player1, 
-                player2
-            );
+            return new GameContext(player1, player2);
         });
+
+        GameContext game = games.get(roomId);
+    
+        return new AddGameResult(
+            game.getFov(player1),
+            game.getFov(player2)
+        );
     }
 
     public void deleteGame(String roomId) {
@@ -100,62 +64,78 @@ public class GameService {
         }
     }
 
-    public Boolean isGameOver(String roomId) {
+    public ForfeitResult forfeitGame(String roomId, String username) {
         Lock lock = gameLocks.get(roomId);
-        if (lock == null) {
+        if(lock == null) {
             return null;
         }
-        
+
         lock.lock();
+
         try {
-            Game game = games.get(roomId);
-            if(game == null) {
+            GameContext game = games.get(roomId);
+
+            if (game.isGameOver()) {
                 return null;
             }
-            return game.isGameOver();
+
+            String winner = game.getOtherPlayer(username);
+            game.setGameOver();
+
+            return new ForfeitResult(
+                username, 
+                winner, 
+                new Notification<GameEvent>(
+                    Type.GAME_OVER, 
+                    new GameOver(winner, roomId)
+                )
+            );
+
         }finally {
             lock.unlock();
         }
     }
 
-    public Set<String> getGameFov(String roomId, String username) {
+    public GameActionResult processSkipTurn(String roomId, String username) {
         Lock lock = gameLocks.get(roomId);
         if (lock == null) {
             return null;
         }
 
         lock.lock();
+
         try {
-            Game game = games.get(roomId);
-            if(game == null) {
+            GameContext game = games.get(roomId);
+
+            if (game.isGameOver()) { 
+                return null;  
+            }
+
+            if (!game.isPlayerActive(username)) {
                 return null;
             }
-            return game.getFov(username);
+
+            String activePlayer = game.getActivePlayer();
+            String otherPlayer = game.getOtherPlayer(activePlayer);
+
+            Map<String, List<Notification<GameEvent>>> notifications = new HashMap<>();
+            notifications.put(activePlayer, new ArrayList<>());
+            notifications.put(otherPlayer, new ArrayList<>());
+
+            boolean isGameOver = endTurn(game, roomId, notifications);
+
+            return new GameActionResult(isGameOver, notifications);
+
         }finally {
             lock.unlock();
         }
     }
 
-    public SkipTurnResult processSkipTurn(String roomId, String username, int unitIdx) {
-        Lock lock = gameLocks.get(roomId);
-        if (lock == null) {
-            return null;
-        }
-        lock.lock();
-
-        try {
-            Game game = games.get(roomId);
-            if (!game.getActivePlayer().equals(username)) {
-                return null;
-            }
-            EndTurnResult result = game.skipTurn(unitIdx);
-            return createSkipTurnResult(result, game, roomId);
-        }finally {
-            lock.unlock();
-        }
-    }
-
-    public UnitActionResult processUnitAction(String roomId, String username, UnitActionRequest action) {
+    public GameActionResult processUnitAction(
+        String roomId, 
+        String username, 
+        UnitActionRequest action
+    ) {
         Lock lock = gameLocks.get(roomId);
         if (lock == null) {
             System.err.println("Game lock is null");
@@ -164,16 +144,22 @@ public class GameService {
         lock.lock();
 
         try {
-            Game game = games.get(roomId);
-            if (!game.getActivePlayer().equals(username)) {
+            GameContext game = games.get(roomId);
+
+            if (game.isGameOver()) { 
+                return null;  
+            }
+
+            if (!game.isPlayerActive(username)) {
                 System.err.println("the player is not active");
                 return null;
             }
+
             switch (action.type()) {
                 case "UNIT_MOVE":
-                    return handleUnitMove(game, roomId, action);
+                    return handleMove(game, roomId, action.unitIdx(), action.goal());
                 case "UNIT_ATTACK":
-                    return handleUnitAttack(game, roomId, action);
+                    return handleAttack(game, roomId, action.unitIdx(), action.goal());
                 default:
                     System.err.println("Game action should be either attack or move");
                     return null;
@@ -183,112 +169,126 @@ public class GameService {
         }
     }
 
-    private UnitActionResult handleUnitMove(Game game, String roomId, UnitActionRequest action) {
-        if (!game.canUnitMoveOnHex(action.unitIdx(), action.goal())) {
-            return null;
-        }
-
-        List<HexCoordinates> path = game.searchPath(action.goal());
-        if (path.size() == 0) {
+    public GameActionResult handleMove(
+        GameContext game, 
+        String roomId,
+        int unitIdx, 
+        HexCoordinates goalCoords
+    ){
+        if (!game.canUnitMoveOnHex(unitIdx, goalCoords)) {
+            System.err.println("Unit cannot move on hex");
             return null;
         }
 
         String activePlayer = game.getActivePlayer();
-        String inactivePlayer = game.getInactivePlayer();
+        String otherPlayer = game.getOtherPlayer(activePlayer);
 
-        List<Set<String>> pathFov = game.getPathFov(path.subList(1, path.size()), activePlayer);
-        
+        Map<String, List<Notification<GameEvent>>> notifications = new HashMap<>();
+        notifications.put(activePlayer, new ArrayList<>());
+        notifications.put(otherPlayer, new ArrayList<>());
+
+        List<HexCoordinates> path = game.searchPath(goalCoords, unitIdx, activePlayer);
+        if (path.isEmpty()) {
+            return null;
+        }
+
+        List<HexCoordinates> pathWithoutStart = path.subList(1, path.size());
+        List<Set<String>> pathFov = game.getPathFov(pathWithoutStart, activePlayer);
         List<List<UnitCoordinates>> visibleUnitsAlongPath = game.getVisibleUnitsAlongPath(pathFov);
-        List<HexCoordinates> enemyPath = game.calculateEnemyPovPath(path, inactivePlayer);
+        List<HexCoordinates> otherPlayerViewOfPath = game.calculateEnemyPovPath(path, otherPlayer);
         
-        EndTurnResult result = game.moveUnit(action.unitIdx(), action.goal());
-        
+        game.moveUnit(unitIdx, goalCoords);
 
-        AllyUnitMove allyMoveData = new AllyUnitMove(action.unitIdx(), path, pathFov, visibleUnitsAlongPath, roomId);
-        EnemyUnitMove enemyMoveData = new EnemyUnitMove(action.unitIdx(), enemyPath, roomId);
+        notifications.get(activePlayer).add(new Notification<GameEvent>(Type.ALLY_MOVE, 
+                new AllyUnitMove(unitIdx, pathWithoutStart, pathFov, visibleUnitsAlongPath, roomId)
+        ));
 
-        return new UnitMoveResult(
-            activePlayer,
-            inactivePlayer,
-            new Notification<>(Type.ALLY_MOVE, allyMoveData),
-            new Notification<>(Type.ENEMY_MOVE, enemyMoveData),
-            createTurnChangeNotification(result, game, roomId),
-            createMapShrinkNotification(result, result.fovActive(), game, roomId),
-            createMapShrinkNotification(result, result.fovIncative(), game, roomId),
-            createGameOverNotification(result, roomId)
-        );
+        notifications.get(otherPlayer).add(new Notification<GameEvent>(Type.ENEMY_MOVE, 
+                new EnemyUnitMove(unitIdx, otherPlayerViewOfPath, roomId)
+        ));
+
+        boolean isGameOver = endTurn(game, roomId, notifications);
+
+        return new GameActionResult(isGameOver, notifications);
     }
 
-    private UnitActionResult handleUnitAttack(Game game, String roomId, UnitActionRequest action) {
-        if (!game.canUnitAttackOnHex(action.unitIdx(), action.goal())) {
-            System.err.println("Unit cant attack on hex");
+    public GameActionResult handleAttack(
+        GameContext game, 
+        String roomId, 
+        int attackerIdx, 
+        HexCoordinates targetCoords
+    ) {
+        if (!game.canUnitAttackOnHex(attackerIdx, targetCoords)) {
+            System.err.println("Unit cannot attack on hex");
             return null;
         }
 
         String activePlayer = game.getActivePlayer();
-        String inactivePlayer = game.getInactivePlayer();
-        AttackResult result = game.attack(action.goal());
-        UnitAttack unitAttackData1 = new UnitAttack(action.unitIdx(), action.goal(), result.fov1(), roomId);
-        UnitAttack unitAttackData2 = new UnitAttack(action.unitIdx(), action.goal(), result.fov2(), roomId);
-        EndTurnResult endTurnResult = result.endTurnResult();
+        String otherPlayer = game.getOtherPlayer(activePlayer);
 
-        return new UnitAttackResult(
-            activePlayer,
-            inactivePlayer,
-            new Notification<>(Type.UNIT_ATTACK, unitAttackData1),
-            new Notification<>(Type.UNIT_ATTACK, unitAttackData2),
-            createTurnChangeNotification(result.endTurnResult(), game, roomId),
-            createMapShrinkNotification(endTurnResult, endTurnResult.fovActive(), game, roomId),
-            createMapShrinkNotification(endTurnResult, endTurnResult.fovIncative(), game, roomId),
-            createGameOverNotification(result.endTurnResult(), roomId)
-        );
-    }
+        Map<String, List<Notification<GameEvent>>> notifications = new HashMap<>();
+        notifications.put(activePlayer, new ArrayList<>());
+        notifications.put(otherPlayer, new ArrayList<>());
 
-    private SkipTurnResult createSkipTurnResult(EndTurnResult result, Game game, String roomId) {
-        String activePlayer = game.getActivePlayer();
-        String inactivePlayer = game.getInactivePlayer();
-        return new SkipTurnResult(
-            activePlayer,
-            inactivePlayer,
-            createTurnChangeNotification(result, game, roomId),
-            createMapShrinkNotification(result, result.fovActive(), game, roomId),
-            createMapShrinkNotification(result, result.fovIncative(), game, roomId),
-            createGameOverNotification(result, roomId)
-        );
-    }
+        Map<String, Set<String>> playerFovs = game.killUnitOn(targetCoords);
 
-    private Notification<TurnChange> createTurnChangeNotification(EndTurnResult result, Game game, String roomId) {
-        if (!result.turnChanged()) {
-            return null;
-        }
-        return new Notification<>(
-            Type.TURN_CHANGE, 
-            new TurnChange(result.nextUnitIdx(), roomId)
-        );
-    }
-
-    private Notification<MapShrink> createMapShrinkNotification(EndTurnResult result, Set<String> fov, Game game, String roomId) {
-        if (!result.mapShrinked()) {
-            return null;
-        }
-        return new Notification<>(
-            Type.MAP_SHRINK, 
-            new MapShrink(
-                game.getShrinkLevel(), 
-                result.deadUnits(), 
-                fov, 
+        notifications.forEach((playerUsername, playerNotifs) -> playerNotifs.add(
+            new Notification<GameEvent>(Type.UNIT_ATTACK, new UnitAttack(
+                attackerIdx,
+                targetCoords,
+                playerFovs.get(playerUsername),
                 roomId
-            )
-        );
+            ))
+        ));
+
+        boolean isGameOver = endTurn(game, roomId, notifications);
+
+        return new GameActionResult(isGameOver, notifications);
     }
 
-    private Notification<GameOver> createGameOverNotification(EndTurnResult result, String roomId) {
-        if (!result.gameOver()) {
-            return null;
+    private boolean endTurn(
+        GameContext game, 
+        String roomId, 
+        Map<String, List<Notification<GameEvent>>> notifications
+    ) {
+        String winner = game.resolveGameOver();
+
+        if(game.isGameOver()) {
+            notifications.values().forEach(playerNotifs -> playerNotifs.add(
+                new Notification<GameEvent>(Type.GAME_OVER, new GameOver(winner, roomId))
+            ));
+            return true;
         }
-        return new Notification<>(
-            Type.GAME_OVER, 
-            new GameOver(result.winner(), roomId)
-        );
+
+        int nextIdx = game.nextTurn();
+
+        notifications.values().forEach(playerNotifs -> playerNotifs.add(
+            new Notification<GameEvent>(Type.TURN_CHANGE, new TurnChange(nextIdx, roomId))
+        ));
+
+        ShrinkMapResult shrink = game.shrinkMapIfNeeded();
+
+        if(!shrink.occurred()) {
+            return false;
+        }
+
+        notifications.forEach((playerUsername, playerNotifs) -> playerNotifs.add(
+            new Notification<GameEvent>(Type.MAP_SHRINK, new MapShrink(
+                shrink.shrinkLevel(),
+                shrink.deadUnits(),
+                shrink.playerFovs().get(playerUsername),
+                roomId
+            ))
+        ));
+        
+        String winnerAfterShrink = game.resolveGameOver();
+        if(game.isGameOver()) {
+            notifications.values().forEach(playerNotifs -> playerNotifs.add(
+                new Notification<GameEvent>(Type.GAME_OVER, new GameOver(winnerAfterShrink, roomId))
+            ));
+            return true;
+        }
+
+        return false;
     }
 }

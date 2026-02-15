@@ -8,15 +8,14 @@ import lombok.Setter;
 @Getter
 @Setter
 public class Room {
-
     public final String id;
-    private String creatorName;
-    private String guestName;
+    private String creator;
+    private String guest;
     private Status status;
 
-    public Room(String creatorName) {
+    public Room(String creator) {
         this.id = UUID.randomUUID().toString();
-        this.creatorName = creatorName;
+        this.creator = creator;
         this.status = Status.WAITING;
     }
 
@@ -26,5 +25,4 @@ public class Room {
         PLAYING,
         FINISHED
     }
-
 }

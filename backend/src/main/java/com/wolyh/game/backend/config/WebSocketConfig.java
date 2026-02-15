@@ -53,21 +53,20 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
                 if (StompCommand.CONNECT.equals(accessor.getCommand())) {
                     String authHeader = accessor.getFirstNativeHeader("Authorization");
 
-                    if (authHeader != null && authHeader.startsWith("Bearer ")) {
-                        String token = authHeader.substring(7);
+                    if(authHeader == null || !authHeader.startsWith("Bearer ")) {
+                        throw new MessageDeliveryException("JWT not found");
+                    }
 
-                        if (jwtUtil.validateToken(token)) {
-                            String username = jwtUtil.extractUsername(token);
-                            
-                            UsernamePasswordAuthenticationToken auth = 
-                                new UsernamePasswordAuthenticationToken(username, null, new ArrayList<>());
-                            
-                            accessor.setUser(auth); 
-                        } else {
-                            throw new MessageDeliveryException("Invalid JWT");
-                        }
+                    String token = authHeader.substring(7);
+                    if (jwtUtil.validateToken(token)) {
+                        String username = jwtUtil.extractUsername(token);
+                        
+                        UsernamePasswordAuthenticationToken auth = 
+                            new UsernamePasswordAuthenticationToken(username, null, new ArrayList<>());
+                        
+                        accessor.setUser(auth); 
                     } else {
-                        throw new MessageDeliveryException("No JWT found");
+                        throw new MessageDeliveryException("Invalid JWT");
                     }
                 }
 
@@ -82,25 +81,31 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
                     String username = user.getName();
                     String destination = accessor.getDestination();
 
-                    if (destination != null && destination.startsWith("/user/queue/specific-player")) {
-                        String roomId = accessor.getFirstNativeHeader("roomId");
-
-                        if (roomId == null || roomId.isEmpty()) {
-                            throw new MessageDeliveryException("roomId header required");
-                        }
-                        Boolean isPlayerInRoom = roomService.isPlayerInRoom(username, roomId);
-    
-                        if (isPlayerInRoom == null) {
-                             throw new MessageDeliveryException(
-                                "Room " + roomId + " does not exist"
-                            );
-                        }
-                        if (!isPlayerInRoom) {
-                            throw new MessageDeliveryException(
-                                "You are not authorized to subscribe to the room: " + roomId
-                            );
-                        }
+                    if(destination == null) {
+                        throw new MessageDeliveryException("Destination is null");
                     }
+                    if(!destination.startsWith("/user/queue/")) {
+                        throw new MessageDeliveryException("Destination must be /user/queue/roomId");
+                    }
+    
+                    String roomId = destination.substring("/user/queue/".length());
+
+                    if (roomId == null || roomId.isEmpty()) {
+                        throw new MessageDeliveryException("roomId header required");
+                    }
+                    Boolean isPlayerInRoom = roomService.isPlayerInRoom(username, roomId);
+
+                    if (isPlayerInRoom == null) {
+                            throw new MessageDeliveryException(
+                            "Room " + roomId + " does not exist"
+                        );
+                    }
+                    if (!isPlayerInRoom) {
+                        throw new MessageDeliveryException(
+                            "You are not authorized to subscribe to the room: " + roomId
+                        );
+                    }
+
                 }
                 return message;
             }

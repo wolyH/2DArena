@@ -4,10 +4,10 @@ import type { GameInputHandler } from "../../input/GameInputHandler";
 import type { MenuInputHandler } from "../../input/MenuInputHandler";
 import type { NetworkManager } from "../../NetworkManager";
 import type { RoomState } from "../../RoomState";
-import type { UiManager } from "../../ui/UiManager";
-import type { UnitManager } from "../../unit/UnitManager";
-import type { EventBus } from "../../utils";
+import type { UnitManager } from "../../UnitManager";
 import type { AllEvents } from "../events";
+import type { EventBus } from "../../utils/EvenBus";
+import type { UiManager } from "../../UiManager";
 
 export class MenuEventHandler {
     readonly #eventBus: EventBus<AllEvents>;
@@ -110,7 +110,6 @@ export class MenuEventHandler {
 
         this.#eventBus.on("game_start", (player1, player2, fov) => {
             this.#mapManager.fill();
-            this.#eventBus.emit("map_content_changed");
             this.#gameInputHandler.clearHoverState();
             this.#fovManager.setFov(fov);
             this.#unitManager.spawnUnits(player1, player2);

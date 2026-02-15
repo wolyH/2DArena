@@ -2,7 +2,6 @@ package com.wolyh.game.backend.service;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
@@ -12,13 +11,14 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import com.wolyh.game.backend.dto.RoomResponses;
+import com.wolyh.game.backend.game.Result.AddGameResult;
+import com.wolyh.game.backend.game.Result.ForfeitResult;
 import com.wolyh.game.backend.dto.Notification;
-import com.wolyh.game.backend.dto.Notification.GameOver;
 import com.wolyh.game.backend.dto.Notification.GameStart;
 import com.wolyh.game.backend.dto.Notification.PlayerJoin;
 import com.wolyh.game.backend.dto.Notification.PlayerLeave;
 import com.wolyh.game.backend.dto.Notification.RoomDelete;
-import com.wolyh.game.backend.dto.Notification.RoomExitEvent;
+import com.wolyh.game.backend.dto.Notification.RoomEvent;
 import com.wolyh.game.backend.dto.Notification.Type;
 import com.wolyh.game.backend.model.Room;
 import com.wolyh.game.backend.model.Room.Status;
@@ -35,20 +35,19 @@ public class RoomService {
 
     public static record StartGameResult(
         RoomResponses.StartGame response,
-        Notification<GameStart> notification,
-        String username
+        Notification<RoomEvent> notification,
+        String userNotified
     ) {}
 
     public static record JoinRoomResult(
         RoomResponses.JoinRoom response,
-        Notification<PlayerJoin> notification,
-        String username
+        Notification<RoomEvent> notification,
+        String userNotified
     ) {}
 
     public static record LeaveRoomResult(
-        Notification<RoomExitEvent> playerLeaveNotif,
-        Notification<GameOver> gameOverNotif,
-        String username
+        Notification<RoomEvent> notification,
+        String userNotified
     ) {}
 
     public Boolean isPlayerInRoom(String username, String roomId) {
@@ -56,14 +55,33 @@ public class RoomService {
         return playerRoomId == null ? null : playerRoomId.equals(roomId);
     }
 
-    public RoomResponses.CreateRoom createRoom(String creatorName) {
-        if (playerToRoom.get(creatorName) != null) {
+    public void markGameAsFinished(String roomId) {
+        Lock lock = roomLocks.get(roomId);
+        if (lock == null) {
+            return;
+        }
+
+        lock.lock();
+
+        try {
+            Room room = rooms.get(roomId);
+            if (room == null || !(room.getStatus() == Status.PLAYING)) {
+                return;
+            }
+            room.setStatus(Status.FINISHED);
+        }finally {
+            lock.unlock();
+        }
+    }
+
+    public RoomResponses.CreateRoom createRoom(String creator) {
+        if (playerToRoom.get(creator) != null) {
             return null;
         }
         
-        Room room = new Room(creatorName);
+        Room room = new Room(creator);
         
-        String previous = playerToRoom.putIfAbsent(creatorName, room.id);
+        String previous = playerToRoom.putIfAbsent(creator, room.id);
         if (previous != null) {
             return null;
         }
@@ -90,18 +108,20 @@ public class RoomService {
             }
 
             room.setStatus(Status.PLAYING);
-            gameService.addGame(roomId, room.getCreatorName(), room.getGuestName());
 
-            Set<String> initialCreatorFov = gameService.getGameFov(roomId, room.getCreatorName());
-            Set<String> initialGuestFov = gameService.getGameFov(roomId, room.getGuestName());
+            String creator = room.getCreator();
+            String guest = room.getGuest();
+            
+            AddGameResult result = gameService.addGame(roomId, creator, guest);
 
-            GameStart data = new GameStart(room.getCreatorName(), room.getGuestName(), initialGuestFov,  roomId);
+            GameStart data = new GameStart(creator, guest, result.player2Fov(), roomId);
             
             return new RoomService.StartGameResult(
-                new RoomResponses.StartGame(room.getCreatorName(), room.getGuestName(), initialCreatorFov, roomId),
-                new Notification<GameStart>(Type.GAME_START, data),
-                room.getGuestName()
+                new RoomResponses.StartGame(creator, guest, result.player1Fov(), roomId),
+                new Notification<RoomEvent>(Type.GAME_START, data),
+                guest
             );
+
         }finally {
             lock.unlock();
         }
@@ -110,7 +130,7 @@ public class RoomService {
     public List<RoomResponses.JoinRoom> getAvailableRooms() {
         return rooms.values().stream()
             .filter(room -> room.getStatus() == Status.WAITING)
-            .map(room -> new RoomResponses.JoinRoom(room.getCreatorName(), room.id))
+            .map(room -> new RoomResponses.JoinRoom(room.getCreator(), room.id))
             .collect(Collectors.toList());
     }
 
@@ -118,6 +138,7 @@ public class RoomService {
         if (playerToRoom.get(username) != null) {
             return null;
         }
+
         Lock lock = roomLocks.get(roomId);
         if (lock == null) {
             return null;
@@ -129,21 +150,47 @@ public class RoomService {
             if (room == null) {
                 return null;
             }
-            if (username.equals(room.getCreatorName()) || room.getStatus() != Status.WAITING) {
+
+            String creator = room.getCreator();
+
+            if (username.equals(creator) || room.getStatus() != Status.WAITING) {
                 return null;
             }
 
-            room.setGuestName(username);
+            room.setGuest(username);
             room.setStatus(Status.FULL);
             playerToRoom.put(username, roomId);
 
             PlayerJoin data = new PlayerJoin(username, roomId);
 
             return new RoomService.JoinRoomResult(
-                new RoomResponses.JoinRoom(room.getCreatorName(), roomId),
-                new Notification<PlayerJoin>(Type.PLAYER_JOIN, data),
-                room.getCreatorName()
+                new RoomResponses.JoinRoom(creator, roomId),
+                new Notification<RoomEvent>(Type.PLAYER_JOIN, data),
+                creator
             );
+        }finally {
+            lock.unlock();
+        }
+    }
+
+    public ForfeitResult processForfeit(String roomId, String username) {
+        Lock lock = roomLocks.get(roomId);
+        if (lock == null) {
+            return null;
+        }
+
+        lock.lock();
+        try {
+            Room room = rooms.get(roomId);
+            if (room == null) {
+                return null;
+            }
+            if(room.getStatus() != Status.PLAYING) {
+                return null;
+            }
+            ForfeitResult result = gameService.forfeitGame(roomId, username);
+            room.setStatus(Status.FINISHED);
+            return result;
         }finally {
             lock.unlock();
         }
@@ -161,14 +208,10 @@ public class RoomService {
             if (room == null) {
                 return null;
             }
-            if (room.getStatus() == Status.PLAYING && gameService.isGameOver(roomId)) {
-                room.setStatus(Status.FINISHED);
-            }
+
             switch(room.getStatus()) {
                 case Status.WAITING, Status.FULL:
                     return handleNotStartedGame(room, username);
-                case Status.PLAYING:
-                    return handlePlayingGame(room, username);
                 case Status.FINISHED:
                     return handleFinishedGame(room, username);
                 default:
@@ -183,70 +226,65 @@ public class RoomService {
     }
 
     private LeaveRoomResult handleNotStartedGame(Room room, String username) {
-        if (username.equals(room.getCreatorName())) {
+        String creator = room.getCreator();
+        String guest = room.getGuest();
+
+        if (username.equals(creator)) {
             rooms.remove(room.id);
             playerToRoom.remove(username);
+
             if (room.getStatus() == Status.WAITING) {
-                return new LeaveRoomResult(null, null, null);
+                return new LeaveRoomResult(null, null);
             }
+
             RoomDelete data = new RoomDelete(room.id);
             return new LeaveRoomResult(
-                new Notification<RoomExitEvent>(Type.ROOM_DELETE, data),
-                null,
-                room.getGuestName()
+                new Notification<RoomEvent>(Type.ROOM_DELETE, data),
+                guest
             );
         }
-        if (username.equals(room.getGuestName())) {
-            room.setGuestName(null);
+
+        if (username.equals(guest)) {
+            room.setGuest(null);
             room.setStatus(Status.WAITING);
             playerToRoom.remove(username);
-            PlayerLeave data = new PlayerLeave(username, room.id);
+
             return new LeaveRoomResult(
-                new Notification<RoomExitEvent>(Type.PLAYER_LEAVE, data),
-                null,
-                room.getCreatorName()
+                new Notification<RoomEvent>(
+                    Type.PLAYER_LEAVE, 
+                    new PlayerLeave(username, room.id)
+                ),
+                creator
             );
         }
+        
         return null;
     }
 
-    private LeaveRoomResult handlePlayingGame(Room room, String username) {
-        if(!username.equals(room.getCreatorName()) && !username.equals(room.getGuestName())) {
-            return null;
-        }
-        
-        String winner = username.equals(room.getCreatorName()) ? room.getGuestName() : room.getCreatorName();
-
-        GameOver gameOverData = new GameOver(winner, room.id);
-
-        RemovePlayerFromRoom(room, username);
-
-        return new LeaveRoomResult(
-            null,
-            new Notification<GameOver>(Type.GAME_OVER, gameOverData),
-            winner
-        );
-    }
-
     private LeaveRoomResult handleFinishedGame(Room room, String username) {
-        if(!username.equals(room.getCreatorName()) && !username.equals(room.getGuestName())) {
+        String creator = room.getCreator();
+        String guest = room.getGuest();
+
+        if(!username.equals(creator) && !username.equals(guest)) {
             return null;
         }
-        RemovePlayerFromRoom(room, username);
 
-        if(room.getCreatorName() == null && room.getGuestName() == null) {
+        removePlayer(room, username);
+
+        if(room.getCreator() == null && room.getGuest() == null) {
             rooms.remove(room.id);
             gameService.deleteGame(room.id);
         }
-        return new LeaveRoomResult(null, null, null);
+
+        return new LeaveRoomResult(null, null);
     }
 
-    private void RemovePlayerFromRoom(Room room, String username) {
-        if(username.equals(room.getCreatorName())) {
-            room.setCreatorName(null);
+    private void removePlayer(Room room, String username) {
+        if(username.equals(room.getCreator())) {
+            room.setCreator(null);
         }
-        else if (username.equals(room.getGuestName())) {
-            room.setGuestName(null);
+        else if (username.equals(room.getGuest())) {
+            room.setGuest(null);
         }
         playerToRoom.remove(username);
     }

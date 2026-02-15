@@ -1,6 +1,6 @@
 import type { MapManager } from "./MapManager";
-import { Hex } from "./Hex";
 import type { FovManager } from "./FovManager";
+import { Hex } from "./model/Hex";
 
 export class PathPreviewManager {
     #mapManager: MapManager;

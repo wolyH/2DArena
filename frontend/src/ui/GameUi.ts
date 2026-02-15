@@ -1,7 +1,7 @@
 import { Ui } from "./Ui";
 import { UiButton } from "./UiButton.ts";
-import type { EventBus } from "../utils.ts"
 import type { AllEvents } from "../event/events.ts";
+import type { EventBus } from "../utils/EvenBus.ts";
 
 
 export class GameUi extends Ui {
@@ -33,8 +33,8 @@ export class GameUi extends Ui {
             margin,
             btnW,
             btnH,
-            "Leave Game",
-            () => this.eventBus.emit("leave_room_requested")
+            "Forfeit",
+            () => this.eventBus.emit("forfeit_game")
         ));
     }
 }

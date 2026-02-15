@@ -1,7 +1,7 @@
 import type { PathPreviewManager } from "../PathPreviewManager";
 import type { RoomState } from "../RoomState";
-import type { UiManager } from "../ui/UiManager";
-import type { UnitManager } from "../unit/UnitManager";
+import type { UiManager } from "../UiManager";
+import type { UnitManager } from "../UnitManager";
 import type { Renderer } from "./Renderer";
 
 export class GameRenderer {

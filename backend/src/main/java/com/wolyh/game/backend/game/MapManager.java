@@ -1,8 +1,10 @@
-package com.wolyh.game.backend.model;
+package com.wolyh.game.backend.game;
 
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+
+import com.wolyh.game.backend.model.Hex;
 
 public class MapManager {
     private HashMap<String, Hex> map = new HashMap<>();
@@ -46,7 +48,7 @@ public class MapManager {
         map.remove(Hex.key(0,0));
     }
 
-    public void shrink() {
+    public int shrink() {
         shrinkLevel--;
         int range = shrinkLevel;
         HashMap<String, Hex> newMap = new HashMap<>();
@@ -60,6 +62,7 @@ public class MapManager {
             }
         }
         this.map = newMap;
+        return shrinkLevel;
     }
 
 }

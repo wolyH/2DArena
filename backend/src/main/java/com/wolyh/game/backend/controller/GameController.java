@@ -1,7 +1,6 @@
 package com.wolyh.game.backend.controller;
 
 import java.security.Principal;
-import java.util.ArrayList;
 import java.util.List;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -12,13 +11,12 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Controller;
 
 import com.wolyh.game.backend.dto.Notification;
-import com.wolyh.game.backend.dto.Notification.NotificationBatch;
+import com.wolyh.game.backend.dto.Notification.GameEvent;
+import com.wolyh.game.backend.game.Result.ForfeitResult;
+import com.wolyh.game.backend.game.Result.GameActionResult;
 import com.wolyh.game.backend.dto.UnitActionRequest;
 import com.wolyh.game.backend.service.GameService;
-import com.wolyh.game.backend.service.GameService.SkipTurnResult;
-import com.wolyh.game.backend.service.GameService.UnitActionResult;
-import com.wolyh.game.backend.service.GameService.UnitAttackResult;
-import com.wolyh.game.backend.service.GameService.UnitMoveResult;
+import com.wolyh.game.backend.service.RoomService;
 
 @Controller
 public class GameController {
@@ -27,39 +25,48 @@ public class GameController {
     private GameService gameService;
 
     @Autowired
+    private RoomService roomService;
+
+    @Autowired
     private SimpMessagingTemplate messagingTemplate;
+
+    @MessageMapping("/room/{roomId}/game-forfeit")
+    public void handleForfeit(
+        @DestinationVariable String roomId,
+        Principal principal
+    ) {
+        String username = principal.getName();
+        ForfeitResult result = roomService.processForfeit(roomId, username);
+
+        if (result == null) {
+            System.err.println("Invalid forfeit attempt");
+            return;
+        }
+
+        sendToUser(result.forfeitingPlayer(), roomId, List.of(result.gameOverNotif()));
+        sendToUser(result.otherPlayer(), roomId, List.of(result.gameOverNotif()));
+    }
 
     @MessageMapping("/room/{roomId}/turn-skip")
     public void handleSkipTurn(
         @DestinationVariable String roomId,
-        @Payload int unitIdx,
         Principal principal
     ) {
         String username = principal.getName();
-        SkipTurnResult result = gameService.processSkipTurn(roomId, username, unitIdx);
+        GameActionResult result = gameService.processSkipTurn(roomId, username);
 
-        if(result == null) {
-            System.err.println("Skip Turn Request not valid");
+        if (result == null) {
+            System.err.println("Invalid skip turn attempt");
             return;
         }
 
-        sendBatchToUser(
-            result.activePlayer(),
-            batch(
-                result.turnChangeNotif(), 
-                result.mapShrinkNotifActive(), 
-                result.gameOverNotif()
-            )
-        );
+        if(result.isGameOver()) {
+            roomService.markGameAsFinished(roomId);
+        }
 
-        sendBatchToUser(
-            result.inactivePlayer(),
-            batch(
-                result.turnChangeNotif(), 
-                result.mapShrinkNotifIncative(), 
-                result.gameOverNotif()
-            )
-        );     
+        result.notifications().forEach((playerUsername, playerNotifs) -> sendToUser(
+            playerUsername, roomId, playerNotifs
+        ));
     }
 
     @MessageMapping("/room/{roomId}/unit-action")
@@ -69,79 +76,30 @@ public class GameController {
         Principal principal
     ) {
         String username = principal.getName();
-        UnitActionResult result = gameService.processUnitAction(roomId, username, action);
-
-        if(result == null) {
-            System.err.println("Unit Action Request not valid");
+        GameActionResult result = gameService.processUnitAction(roomId, username, action);
+        
+        if (result == null) {
+            System.err.println("Invalid unit action attempt");
             return;
         }
 
-        switch (result) {
-            case UnitMoveResult moveResult -> {
-                sendBatchToUser(
-                    moveResult.activePlayer(),
-                    batch(
-                        moveResult.unitMoveNotifActive(),
-                        moveResult.turnChangeNotif(), 
-                        moveResult.mapShrinkNotifActive(), 
-                        moveResult.gameOverNotif()
-                    )
-                );   
-                sendBatchToUser(
-                    moveResult.inactivePlayer(),
-                    batch(
-                        moveResult.unitMoveNotifInactive(),
-                        moveResult.turnChangeNotif(), 
-                        moveResult.mapShrinkNotifInactive(), 
-                        moveResult.gameOverNotif()
-                    )
-                );   
-                
-            }
-            case UnitAttackResult attackResult -> {
-                sendBatchToUser(
-                    attackResult.activePlayer(),
-                    batch(
-                        attackResult.unitAttackNotifActive(),
-                        attackResult.turnChangeNotif(), 
-                        attackResult.mapShrinkNotifActive(), 
-                        attackResult.gameOverNotif()
-                    )
-                );   
-                sendBatchToUser(
-                    attackResult.inactivePlayer(),
-                    batch(
-                        attackResult.unitAttackNotifInactive(),
-                        attackResult.turnChangeNotif(), 
-                        attackResult.mapShrinkNotifInactive(), 
-                        attackResult.gameOverNotif()
-                    )
-                ); 
-            }
-            default -> {
-                 System.err.println("Unit Action Request not valid");
-            }
+        if(result.isGameOver()) {
+            roomService.markGameAsFinished(roomId);
         }
+
+        result.notifications().forEach((playerUsername, playerNotifs) -> sendToUser(
+            playerUsername, roomId, playerNotifs
+        ));
     }
 
-    private void sendBatchToUser(String username, NotificationBatch batch) {
-        if (username == null || batch == null || batch.notifications().isEmpty()) {
+    private void sendToUser(String username, String roomId, List<Notification<GameEvent>> batch) {
+        if (batch.isEmpty()) {
             return;
         }
         messagingTemplate.convertAndSendToUser(
             username,
-            "/queue/specific-player",
+            "/queue/" + roomId,
             batch
         );
-    }
-
-    private NotificationBatch batch(Notification<?>... notifs) {
-        List<Notification<?>> list = new ArrayList<>();
-        for (Notification<?> n : notifs) {
-            if (n != null) {
-                list.add(n);
-            }
-        }
-        return new NotificationBatch(list);
     }
 }

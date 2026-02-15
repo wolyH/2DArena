@@ -1,4 +1,4 @@
-import { Hex } from "./Hex.ts";
+import { Hex } from "./model/Hex";
 
 export class MapManager {
 

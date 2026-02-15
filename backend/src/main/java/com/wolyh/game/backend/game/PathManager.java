@@ -1,10 +1,13 @@
-package com.wolyh.game.backend.model;
+package com.wolyh.game.backend.game;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import com.wolyh.game.backend.model.Hex;
+import com.wolyh.game.backend.model.HexCoordinates;
 
 public class PathManager {
     private final MapManager mapManager;
@@ -14,23 +17,18 @@ public class PathManager {
     public PathManager(
         MapManager mapManager,
         UnitManager unitManager,
-        FovManager fovManager
+        FovManager fovManager,
+        PlayerManager playerManager
     ) {
         this.mapManager = mapManager;
         this.unitManager = unitManager;
         this.fovManager = fovManager;
     }
 
-    public List<HexCoordinates> searchPath(HexCoordinates goalCoords, String username) {
-        if(!username.equals(unitManager.player1) && !username.equals(unitManager.player2)) {
-             throw new IllegalArgumentException(
-                "username must be the username of a player present in the room"
-            );
-        }
-
+    public List<HexCoordinates> searchPath(HexCoordinates goalCoords, int unitIdx, String username) {
         ArrayList<HexCoordinates> path = new ArrayList<>();
 
-        Hex start = unitManager.getActiveUnitHex();
+        Hex start = unitManager.getHex(unitIdx);
         Hex goal = mapManager.getHex(Hex.key(goalCoords.q(), goalCoords.r()));
 
         if(start == null || goal == null || start.getKey().equals(goal.getKey())) {
@@ -89,7 +87,7 @@ public class PathManager {
 
         boolean prevVisible = false;
         for (int i = 0 ; i < path.size() ; i++) {
-            boolean currVisible = fovManager.isVisible(path.get(i), enemy);
+            boolean currVisible = fovManager.isVisibleBy(path.get(i), enemy);
 
             if (currVisible && !prevVisible && i > 0) {
                 enemyPovPath.add(path.get(i - 1));
@@ -122,7 +120,7 @@ public class PathManager {
 
         for (int[] vector : directionVectors) {
             Hex neighbor = mapManager.getHex(Hex.key(h.getQ() + vector[0], h.getR() + vector[1]));
-            if(neighbor != null && neighbor.isTraversable() && fovManager.isVisible(neighbor, username)) {
+            if(neighbor != null && neighbor.isTraversable() && fovManager.isVisibleBy(neighbor, username)) {
                 neighbors.add(neighbor);
                 if(goal.getKey().equals(neighbor.getKey())) {
                     return new SearchNeighborsResult(neighbors, true);

@@ -13,7 +13,7 @@ public class BackendApplication implements CommandLineRunner {
 
 	@Override
 	public void run(String... args) throws Exception {
-		System.out.println("hi");
+		System.out.println("Backend started");
 	}
 
 }
