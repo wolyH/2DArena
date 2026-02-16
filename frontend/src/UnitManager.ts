@@ -14,7 +14,7 @@ export class UnitManager {
     readonly #roomState: RoomState;
 
     #units: Array<Unit> = [];
-    #unitIdx: number = 0;
+    #activeUnitIdx: number = 0;
 
     constructor(
         mapManager: MapManager,
@@ -30,23 +30,27 @@ export class UnitManager {
         this.#roomState = roomState;
     }
 
-    get unitIdx(): number {
-        return this.#unitIdx;
+    get activeUnitIdx(): number {
+        return this.#activeUnitIdx;
     }
 
     setUnitIdx(unitIdx: number): void {
-        this.#unitIdx = unitIdx;
+        this.#activeUnitIdx = unitIdx;
     }
 
     getActiveUnit(): Unit {
-        return this.#units[this.#unitIdx];
+        return this.#units[this.#activeUnitIdx];
     }
 
-    isDead(idx: number) {
-        if (idx < 0 || idx >= this.#units.length) {
-            throw new Error (`unit idx ${idx} is uncorrect`);
+    isUnitActive(unitIdx: number): boolean {
+        return this.activeUnitIdx === unitIdx;
+    }
+
+    isDead(unitIdx: number) {
+        if (unitIdx < 0 || unitIdx >= this.#units.length) {
+            throw new Error (`unit idx ${unitIdx} is uncorrect`);
         }
-        return this.#units[idx].isDead;
+        return this.#units[unitIdx].isDead;
     }
 
     killOutOfMapUnits(deadUnits: Array<number>): void {
@@ -83,7 +87,7 @@ export class UnitManager {
 
     private setUnits(units: Array<Unit>) {
         this.#units = units;
-        this.#unitIdx = 0;
+        this.#activeUnitIdx = 0;
     }
 
     public forEachAliveUnit(consumer: (unit: Unit) => void) {
@@ -97,7 +101,7 @@ export class UnitManager {
     public setEnemyLocation(enemyLocation: Map<number, Hex>): void {
         for(const unit of this.#units) {
             const hex = enemyLocation.get(unit.idx);
-            if(!this.unitIsEnemy(unit)) {
+            if(!this.isUnitEnemy(unit)) {
                 continue;
             }
             
@@ -131,46 +135,31 @@ export class UnitManager {
         }
     }
 
-    canBeAttacked(targetHex: Hex, attacker: Unit) {
-        return targetHex &&
-            !targetHex.isObstacle &&
-            this.#fovManager.isVisible(targetHex) && 
-            targetHex.unit !== undefined &&
-            targetHex.unit.player === this.getUnitOpponent(attacker) &&
-            attacker.hex &&
-            attacker.hex.isNeighbor(targetHex);
-    }
-
     canAttack(attacker: Unit, targetHex: Hex): boolean {
-        return !targetHex.isObstacle &&
+        return targetHex &&
+            attacker.hex &&
+            !targetHex.isObstacle &&
             this.#fovManager.isVisible(targetHex) &&
-            targetHex.unit !== undefined && 
-            attacker.hex.isNeighbor(targetHex) && 
-            this.unitIsEnemy(targetHex.unit) && 
-            this.unitIsAlly(attacker);
+            targetHex.unit !== undefined &&
+            this.isUnitEnemy(targetHex.unit) &&
+            this.isUnitAlly(attacker) &&
+            attacker.hex.isNeighbor(targetHex);
     }
 
     canActiveUnitActs(): boolean {
         const activeUnit = this.getActiveUnit();
 
-        if (!activeUnit.is("Idle") || !this.unitIsAlly(activeUnit)) {
+        if (!activeUnit.is("Idle") || !this.isUnitAlly(activeUnit)) {
             return false;
         }
         return true;
     }
 
-    private unitIsAlly(unit: Unit): boolean {
+    isUnitAlly(unit: Unit): boolean {
         return unit.player === this.#roomState.username;
     }
 
-    private unitIsEnemy(unit: Unit): boolean {
+    isUnitEnemy(unit: Unit): boolean {
         return unit.player === this.#roomState.opponent;
-    }
-
-    getUnitOpponent(unit: Unit): string {
-        if (unit.player == this.#roomState.username) {
-            return this.#roomState.opponent;
-        }
-        return this.#roomState.username;
     }
 }

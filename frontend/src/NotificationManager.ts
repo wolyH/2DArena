@@ -2,7 +2,7 @@ import type { Notification } from "./dto/Notification";
 import type { AllEvents } from "./event/events";
 import type { RoomState } from "./RoomState";
 import type { EventBus } from "./utils/EvenBus";
-
+    
 export class NotificationManager {
     #eventBus: EventBus<AllEvents>;
     #roomState: RoomState;
@@ -33,47 +33,16 @@ export class NotificationManager {
         }
   
         if(this.#roomState.room.roomId !== notification.data.roomId) {
-            throw new Error(`Wrong roomId, expected ${this.#roomState.room.roomId} received ${notification.data.roomId}`);
+            throw new Error(
+                `Wrong roomId, expected ${this.#roomState.room.roomId} received ${notification.data.roomId}`
+            );
         }
 
-        switch (notification.type) {
-            case "PLAYER_JOIN":
-                this.#eventBus.emit("player_joined_room", notification.data.username);
-                break;
-            case "ROOM_DELETE":
-                this.#eventBus.emit("leave_room");
-                break;
-            case "PLAYER_LEAVE":
-                this.#eventBus.emit("player_left_room", notification.data.username);
-                break; 
-            case "GAME_START":
-                this.#eventBus.emit("game_start", notification.data.player1, notification.data.player2, notification.data.fov);
-                break;
-            case "ALLY_MOVE":
-                 this.#eventBus.emit("ally_move", notification.data);
-                break;
-            case "ENEMY_MOVE":
-                this.#eventBus.emit("enemy_move", notification.data);
-                break;
-            case "UNIT_ATTACK":
-                this.#eventBus.emit("unit_attack", notification.data);
-                break;
-            case "TURN_CHANGE":
-                this.#eventBus.emit("turn_change", notification.data.nextUnitIdx);
-                break;
-            case "MAP_SHRINK":
-                this.#eventBus.emit("map_shrink", notification.data.shrinkLevel, notification.data.deadUnits, notification.data.fov);
-                break;
-            case "GAME_OVER":
-                this.#eventBus.emit("game_over", notification.data.winner);
-        }
+        this.#eventBus.emit(notification.type, notification.data);
     }
 
     private parseNotification(update: any): Notification | undefined {
-        if (!update || typeof update.type !== "string" || !update.data || typeof update.data !== "object") {
-            return undefined;
-        }
-        if (typeof update.data.roomId !== 'string') {
+        if(!this.isUpdateValid(update)) {
             return undefined;
         }
 
@@ -81,113 +50,91 @@ export class NotificationManager {
         switch (update.type) {
             case "PLAYER_JOIN":
             case "PLAYER_LEAVE":
-                if (typeof data.username !== 'string') {
-                    return undefined;   
-                }
-                return update
+                return this.isString(data.username) ? update : undefined;
             case "ROOM_DELETE":
                 return update;
             case "GAME_START":
-                if (typeof data.player1 !== 'string' || typeof data.player2 !== 'string') { 
-                    return undefined;
-                }
-                if (!Array.isArray(data.fov) || !data.fov.every((x: any) => {return (x && typeof x === "string");})) {
-                    return undefined;
-                }
-                return update;
+                return this.isString(data.player1) && 
+                    this.isString(data.player2) && 
+                    this.isStringArray(data.fov) 
+                ? update : undefined;
             case "ALLY_MOVE":
-                if (typeof data.unitIdx !== 'number') { 
-                    return undefined; 
-                }
-                if (!Array.isArray(data.path) || 
-                    !data.path.every(
-                        (x: any) => {
-                            return (x && typeof x.q === "number" && typeof x.r === "number");
-                        }
-                    )
-                ) { 
-                    return undefined; 
-                }
-                if (!Array.isArray(data.pathFov) ||
-                    !data.pathFov.every(
-                        (fov: any) => {
-                            return Array.isArray(fov) && fov.every(
-                                (x: any) => {
-                                    return typeof x === "string";
-                                }
-                            )
-                        }
-                    )
-                ) {
-                    return undefined;
-                }
-
-                if (!Array.isArray(data.visibleUnitsAlongPath) ||
-                    !data.visibleUnitsAlongPath.every(
-                        (fov: any) => {
-                            return Array.isArray(fov) && fov.every(
-                                (x: any) => {
-                                    return (x && typeof x.q === "number" && typeof x.r === "number" && typeof x.idx === "number")
-                                }
-                            )
-                        }
-                    )
-                ) {
-                    return undefined;
-                }
-                
-                if (typeof data.unitIdx !== 'number') { 
-                    return undefined; 
-                }
-                return update;
+                return this.isNumber(data.unitIdx) &&
+                   this.isHexCoordsArray(data.path) &&
+                   this.isStringArray2D(data.pathFov) &&
+                   this.isUnitCoordsArray2D(data.visibleUnitsAlongPath)
+                ? update : undefined;
             case "ENEMY_MOVE":
-                if (typeof data.unitIdx !== 'number') { 
-                    return undefined; 
-                }
-                if (!Array.isArray(data.path) || 
-                    !data.path.every(
-                        (x: any) => {
-                            return (x && typeof x.q === "number" && typeof x.r === "number");
-                        }
-                    )
-                ) { 
-                    return undefined; 
-                }
-                return update;
+                return this.isNumber(data.unitIdx) &&
+                    this.isHexCoordsArray(data.path)
+                ? update : undefined;
             case "UNIT_ATTACK":
-                if (!data.targetCoords || typeof data.targetCoords.q !== 'number' || typeof data.targetCoords.r !== 'number') { 
-                    return undefined; 
-                }
-                if (typeof data.attackerIdx !== 'number') { 
-                    return undefined; 
-                }
-                if (!Array.isArray(data.fov) || !data.fov.every((x: any) => {return (x && typeof x === "string");})) {
-                    return undefined;
-                }
-                return update;
+                return this.isHexCoord(data.targetCoords) &&
+                    this.isNumber(data.attackerIdx) &&
+                    this.isStringArray(data.fov)
+                ? update : undefined;
             case "TURN_CHANGE":
-                if (typeof data.nextUnitIdx !== 'number') { 
-                    return undefined; 
-                }
-                return update;
+                return this.isNumber(data.nextUnitIdx) ? update : undefined;
             case "MAP_SHRINK":
-                if (typeof data.shrinkLevel !== 'number') { 
-                    return undefined; 
-                }
-                if (!Array.isArray(data.deadUnits) || !data.deadUnits.every((x: any) => {return typeof x === "number"})) {
-                    return undefined;
-                }
-                if (!Array.isArray(data.fov) || !data.fov.every((x: any) => {return (x && typeof x === "string");})) {
-                    return undefined;
-                }
-                return update;
+                return this.isNumber(data.shrinkLevel) &&
+                    this.isNumberArray(data.deadUnits) &&
+                    this.isStringArray(data.fov)
+                ? update : undefined;
             case "GAME_OVER":
-                if (typeof data.winner !== "string" && data.winner !== null) {
-                    return undefined;
-                }
-                return update;
+                return this.isString(data.winner) ? update : undefined;
             default:
                 return undefined;
         }
+    }
+
+    private isUpdateValid(update: any): boolean {
+        return update && 
+            typeof update.type === "string" && 
+            update.data && 
+            typeof update.data === "object" &&
+            typeof update.data.roomId === "string";
+    }
+
+    private isString(val: any): boolean {
+        return typeof val === "string";
+    }
+
+    private isNumber(val: any): boolean {
+        return typeof val === "number";
+    }
+
+    private isHexCoord(val: any): boolean {
+        return val && typeof val.q === "number" && typeof val.r === "number";
+    }
+
+    private isNumberArray(arr: any): boolean {
+        return Array.isArray(arr) && arr.every(x => typeof x === "number");
+    }
+
+    private isStringArray(arr: any): boolean {
+        return Array.isArray(arr) && arr.every(x => typeof x === "string");
+    }
+
+    private isHexCoordsArray(arr: any): boolean {
+        return Array.isArray(arr) && 
+            arr.every(x => x && typeof x.q === "number" && typeof x.r === "number");
+    }
+
+    private isStringArray2D(arr: any): boolean {
+        return Array.isArray(arr) && 
+            arr.every(fov => this.isStringArray(fov));
+    }
+
+    private isUnitCoordsArray2D(arr: any): boolean {
+        return Array.isArray(arr) && 
+            arr.every(snapshot => 
+                Array.isArray(snapshot) && 
+                snapshot.every(x => 
+                    x && 
+                    typeof x.q === "number" && 
+                    typeof x.r === "number" && 
+                    typeof x.idx === "number"
+                )
+            );
     }
 }

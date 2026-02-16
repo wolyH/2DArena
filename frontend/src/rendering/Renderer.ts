@@ -95,7 +95,7 @@ export class Renderer {
 
         //Hex Top surface drawing
         const outline = new Path2D();
-        for (const h of this.#mapManager.getMap()) {
+        this.#mapManager.forEachHex(h => {
             const corners = this.#layoutManager.findCorners(h);
             ctx.beginPath();
             ctx.moveTo(corners[0].x, corners[0].y);
@@ -114,14 +114,14 @@ export class Renderer {
             }
 
             outline.closePath();
-        }
+        });
         const scale = this.#layoutManager.getSizeX() / 100; 
         ctx.lineWidth = Renderer.DEFAULT_LINE_WIDTH * scale;
         ctx.strokeStyle = Hex.DEFAULT_STROKE_COLOR;
         ctx.stroke(outline);
 
         ctx.restore();
-      }
+    }
 
     private drawMapDepth(): void { 
         const ctx = this.#mapCacheCtx;
@@ -131,7 +131,7 @@ export class Renderer {
         const depth = Renderer.DEFAULT_HEX_DEPTH * scale;
         const outline = new Path2D();
         //Depth drawing
-        for (const h of this.#mapManager.getMap()) {
+        this.#mapManager.forEachHex(h => {
             const corners = this.#layoutManager.findCorners(h);
 
             outline.moveTo(corners[1].x,corners[1].y);
@@ -150,10 +150,10 @@ export class Renderer {
             ctx.lineTo(corners[1].x,corners[1].y);
             ctx.fillStyle = Renderer.DEFAULT_DEPTH_FILL_COLOR;
             ctx.fill();
-        }
+        });
         ctx.lineWidth = Renderer.DEFAULT_LINE_WIDTH * scale;
         ctx.strokeStyle = Renderer.DEFAULT_DEPTH_STROKE_COLOR;
-        ctx.stroke(outline);
+        ctx.stroke(outline);  
     }
 
     drawUnit(unit: Unit): void {

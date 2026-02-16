@@ -23,8 +23,9 @@ import com.wolyh.game.backend.dto.Notification.UnitAttack;
 import com.wolyh.game.backend.game.GameContext;
 import com.wolyh.game.backend.game.Result.AddGameResult;
 import com.wolyh.game.backend.game.Result.ForfeitResult;
-import com.wolyh.game.backend.game.Result.GameActionResult;
 import com.wolyh.game.backend.game.Result.ShrinkMapResult;
+import com.wolyh.game.backend.game.Result.SkipTurnResult;
+import com.wolyh.game.backend.game.Result.UnitActionResult;
 import com.wolyh.game.backend.dto.Notification.Type;
 import com.wolyh.game.backend.model.HexCoordinates;
 import com.wolyh.game.backend.model.UnitCoordinates;
@@ -96,7 +97,7 @@ public class GameService {
         }
     }
 
-    public GameActionResult processSkipTurn(String roomId, String username) {
+    public SkipTurnResult processSkipTurn(String roomId, String username) {
         Lock lock = gameLocks.get(roomId);
         if (lock == null) {
             return null;
@@ -124,14 +125,14 @@ public class GameService {
 
             boolean isGameOver = endTurn(game, roomId, notifications);
 
-            return new GameActionResult(isGameOver, notifications);
+            return new SkipTurnResult(isGameOver, notifications);
 
         }finally {
             lock.unlock();
         }
     }
 
-    public GameActionResult processUnitAction(
+    public UnitActionResult processUnitAction(
         String roomId, 
         String username, 
         UnitActionRequest action
@@ -169,7 +170,7 @@ public class GameService {
         }
     }
 
-    public GameActionResult handleMove(
+    public UnitActionResult handleMove(
         GameContext game, 
         String roomId,
         int unitIdx, 
@@ -209,10 +210,10 @@ public class GameService {
 
         boolean isGameOver = endTurn(game, roomId, notifications);
 
-        return new GameActionResult(isGameOver, notifications);
+        return new UnitActionResult(isGameOver, notifications);
     }
 
-    public GameActionResult handleAttack(
+    public UnitActionResult handleAttack(
         GameContext game, 
         String roomId, 
         int attackerIdx, 
@@ -243,7 +244,7 @@ public class GameService {
 
         boolean isGameOver = endTurn(game, roomId, notifications);
 
-        return new GameActionResult(isGameOver, notifications);
+        return new UnitActionResult(isGameOver, notifications);
     }
 
     private boolean endTurn(

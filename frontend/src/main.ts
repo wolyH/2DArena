@@ -11,7 +11,7 @@ import { RoomState } from './RoomState.ts';
 import { UnitManager } from './UnitManager.ts';
 import { GameActionEventHandler } from './event/handler/GameActionEventHandler.ts';
 import { InputEventHandler } from './event/handler/InputEventHandler.ts';
-import { MenuEventHandler } from './event/handler/MenuEventHandler.ts';
+import { HttpEventHandler } from './event/handler/HttpEventHandler.ts';
 import { NotificationEventHandler } from './event/handler/NotificationEventHandler.ts';
 import type { AllEvents } from './event/events.ts';
 import { PathPreviewManager } from './PathPreviewManager.ts';
@@ -25,6 +25,7 @@ import { AssetManager } from './utils/AssetManager.ts';
 import { createEventBus } from './utils/EvenBus.ts';
 import { UiManager } from './UiManager.ts';
 import { MovementState } from './MovementState.ts';
+import { ActionValidator } from './ActionValidator.ts';
 
 const assetManager = new AssetManager();
 
@@ -127,19 +128,16 @@ const notificationManager = new NotificationManager(
     roomState
 )
 
+const actionValidator = new ActionValidator(
+    unitManager,
+    mapManager,
+    fovManager
+)
+
 const gameActionEventHandler = new GameActionEventHandler(
     eventBus, 
-    uiManager, 
-    networkManager, 
-    mapManager, 
-    gameInputHandler, 
-    menuInputHandler, 
-    unitManager, 
-    pathPreviewManager,
-    movementState,
-    fovManager,
-    layoutManager,
-    roomState
+    networkManager,
+    unitManager
 );
 
 const renderingEventHandler = new RenderingEventHandler(
@@ -158,15 +156,12 @@ const inputEventHandler = new InputEventHandler(
     fovManager
 );
 
-const menuEventHandler = new MenuEventHandler(
+const httpEventHandler = new HttpEventHandler(
     eventBus, 
     uiManager, 
-    mapManager, 
     networkManager, 
     gameInputHandler, 
     menuInputHandler, 
-    fovManager,
-    unitManager, 
     roomState
 );
 
@@ -174,18 +169,26 @@ const notificationEventHandler = new NotificationEventHandler(
     eventBus, 
     uiManager,
     notificationManager,
-    roomState
+    roomState,
+    pathPreviewManager,
+    movementState,
+    unitManager,
+    fovManager,
+    layoutManager,
+    actionValidator,
+    mapManager,
+    gameInputHandler,
+    menuInputHandler
 );
 
 const game = new Game(
   gameActionEventHandler,
   renderingEventHandler,
   inputEventHandler,
-  menuEventHandler,
+  httpEventHandler,
   notificationEventHandler,
   menuInputHandler,
   gameRenderer,
-  layoutManager,
   uiManager,
   cameraManager,
   unitManager,

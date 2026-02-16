@@ -2,10 +2,9 @@ import type { CameraManager } from "./CameraManager";
 import type { GameActionEventHandler } from "./event/handler/GameActionEventHandler";
 import type { RenderingEventHandler } from "./event/handler/RenderingEventHandler";
 import type { InputEventHandler } from "./event/handler/InputEventHandler";
-import type { MenuEventHandler } from "./event/handler/MenuEventHandler";
+import type { HttpEventHandler } from "./event/handler/HttpEventHandler";
 import type { NotificationEventHandler } from "./event/handler/NotificationEventHandler";
 import type { MenuInputHandler } from "./input/MenuInputHandler";
-import type { LayoutManager } from "./LayoutManager";
 import type { MovementManager } from "./MovementManager";
 import type { NotificationManager } from "./NotificationManager";
 import type { GameRenderer } from "./rendering/GameRenderer";
@@ -17,11 +16,10 @@ export class Game {
     #gameActionEventHandler: GameActionEventHandler;
     #renderingEventHandler: RenderingEventHandler;
     #inputEventHandler: InputEventHandler;
-    #menuEventHandler: MenuEventHandler;
+    #httpEventHandler: HttpEventHandler;
     #notificationEventHandler: NotificationEventHandler;
     #menuInputHandler: MenuInputHandler;
     #gameRenderer: GameRenderer;
-    #layoutManager: LayoutManager
     #uiManager: UiManager;
     #cameraManager: CameraManager;
     #unitManager: UnitManager;
@@ -37,11 +35,10 @@ export class Game {
         gameActionEventHandler: GameActionEventHandler,
         renderingEventHandler: RenderingEventHandler,
         inputEventHandler: InputEventHandler,
-        menuEventHandler: MenuEventHandler,
+        httpEventHandler: HttpEventHandler,
         notificationEventHandler: NotificationEventHandler,
         menuInputHandler: MenuInputHandler,
         gameRenderer: GameRenderer,
-        layoutManager: LayoutManager,
         uiManager: UiManager,
         cameraManager: CameraManager,
         unitManager: UnitManager,
@@ -52,11 +49,10 @@ export class Game {
         this.#gameActionEventHandler = gameActionEventHandler;
         this.#renderingEventHandler = renderingEventHandler;
         this.#inputEventHandler = inputEventHandler;
-        this.#menuEventHandler = menuEventHandler;
+        this.#httpEventHandler = httpEventHandler;
         this.#notificationEventHandler = notificationEventHandler;
         this.#menuInputHandler = menuInputHandler;
         this.#gameRenderer = gameRenderer;
-        this.#layoutManager = layoutManager
         this.#uiManager = uiManager
         this.#cameraManager = cameraManager;
         this.#unitManager = unitManager;
@@ -68,7 +64,7 @@ export class Game {
         this.#gameActionEventHandler.setup();
         this.#renderingEventHandler.setup();
         this.#inputEventHandler.setup();
-        this.#menuEventHandler.setup();
+        this.#httpEventHandler.setup();
         this.#notificationEventHandler.setup();
         
         this.#menuInputHandler.setupEventListeners();
@@ -82,8 +78,8 @@ export class Game {
         if (elapsed >= this.#targetFrameTime) {
             this.#previousTime = currentTime - (elapsed % this.#targetFrameTime);
 
-            //player speed and camera speed now depends on hex size and 
-            const delta = (this.#layoutManager.getSizeX() / 100) * (this.#targetFrameTime / 1000);
+            //player speed and camera speed now depends on window width and FPS 
+            const delta = (window.innerWidth / 1000) * (this.#targetFrameTime / 1000);
 
             switch (this.#uiManager.state) {
                 case "MENU":

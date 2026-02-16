@@ -57,7 +57,7 @@ export class GameRenderer {
         this.#unitManager.forEachAliveUnit(unit => {
             if (!unit.is("Moving")) {
                 const isAlly = unit.player === this.#roomState.username;
-                const isCurrent = this.#unitManager.unitIdx == unit.idx;
+                const isCurrent = this.#unitManager.activeUnitIdx == unit.idx;
                 if(unit.isVisible()) {
                     this.#renderer.drawUnitAura(unit.hex, isAlly, isCurrent);
                 }

@@ -1,7 +1,6 @@
 import { Hex } from "./model/Hex";
 
 export class MapManager {
-
     #map: Map<string, Hex>;
     readonly #n: number;
 
@@ -10,16 +9,18 @@ export class MapManager {
         this.#map = new Map<string, Hex>();
     }
 
-    getHex(hashCode : string): Hex | undefined {
+    getHex(hashCode: string): Hex | undefined {
         return this.#map.get(hashCode);
     }
 
-    hasHex(hashCode : string): boolean {
+    hasHex(hashCode: string): boolean {
         return this.#map.has(hashCode);
     }
 
-    getMap(): ReadonlyArray<Hex> {
-        return [...this.#map.values()];
+    forEachHex(consumer: (hex: Hex) => void): void {
+        for (const hex of this.#map.values()) {
+            consumer(hex);
+        }
     }
 
     get n(): number {

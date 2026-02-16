@@ -13,7 +13,8 @@ import org.springframework.stereotype.Controller;
 import com.wolyh.game.backend.dto.Notification;
 import com.wolyh.game.backend.dto.Notification.GameEvent;
 import com.wolyh.game.backend.game.Result.ForfeitResult;
-import com.wolyh.game.backend.game.Result.GameActionResult;
+import com.wolyh.game.backend.game.Result.SkipTurnResult;
+import com.wolyh.game.backend.game.Result.UnitActionResult;
 import com.wolyh.game.backend.dto.UnitActionRequest;
 import com.wolyh.game.backend.service.GameService;
 import com.wolyh.game.backend.service.RoomService;
@@ -53,7 +54,7 @@ public class GameController {
         Principal principal
     ) {
         String username = principal.getName();
-        GameActionResult result = gameService.processSkipTurn(roomId, username);
+        SkipTurnResult result = gameService.processSkipTurn(roomId, username);
 
         if (result == null) {
             System.err.println("Invalid skip turn attempt");
@@ -76,7 +77,7 @@ public class GameController {
         Principal principal
     ) {
         String username = principal.getName();
-        GameActionResult result = gameService.processUnitAction(roomId, username, action);
+        UnitActionResult result = gameService.processUnitAction(roomId, username, action);
         
         if (result == null) {
             System.err.println("Invalid unit action attempt");

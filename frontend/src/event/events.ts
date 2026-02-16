@@ -1,21 +1,34 @@
 import type { RoomResponses } from "../dto/RoomResponses";
-import type { AllyMoveData, EnemyMoveData, UnitAttackData } from "../dto/Notification";
+import type { AllyMoveData, EnemyMoveData, GameOverData, GameStartData, MapShrinkData, PlayerJoinData, PlayerLeaveData, RoomDeleteData, TurnChangeData, UnitAttackData } from "../dto/Notification";
 import type { UiButton } from "../ui/UiButton";
 import type { Hex } from "../model/Hex";
 
-export type AllEvents = GameActionEvent & GameScreenEvent & InputEvent & MenuEvent & NotificationEvent;
+export type AllEvents = NotificationEvent & InputEvent & RenderingEvent & GameActionEvent & HTTPEvent;
 
 export type NotificationEvent = {
     server_notification: (notification: any) => void;
 
-    player_joined_room: (username: string) => void;
-    player_left_room: (username: string) => void;
+    PLAYER_JOIN: (data: PlayerJoinData) => void;
+    PLAYER_LEAVE: (data: PlayerLeaveData) => void;
+
+    ROOM_DELETE: (data: RoomDeleteData) => void;
+
+    UNIT_ATTACK: (data: UnitAttackData) => void;
+    ALLY_MOVE: (data: AllyMoveData) => void;
+    ENEMY_MOVE: (data: EnemyMoveData) => void;
+
+    TURN_CHANGE: (data: TurnChangeData) => void;
+    MAP_SHRINK: (data: MapShrinkData) => void;
+
+    GAME_START: (data: GameStartData) => void;
+    GAME_OVER: (data: GameOverData) => void;
 };
 
 export type InputEvent = {
     hex_clicked: (hex: Hex) => void;
     hex_hovered: (hex: Hex) => void;
     hex_unhovered: () => void;
+
     button_clicked: (button: UiButton) => void;
     button_hovered: (button: UiButton) => void;
 
@@ -24,7 +37,7 @@ export type InputEvent = {
     window_resized: (x: number , y: number) => void;
 };
 
-export type GameScreenEvent = {
+export type RenderingEvent = {
     fov_changed: () => void;
     map_size_changed: () => void;
 }
@@ -33,20 +46,13 @@ export type GameActionEvent = {
     turn_skip_requested: () => void;
 
     unit_attack_requested: (hex: Hex) => void;
-    unit_attack: (data: UnitAttackData) => void;
 
     unit_move_requested: (hex: Hex) => void;
-    ally_move: (data: AllyMoveData) => void;
-    enemy_move: (data: EnemyMoveData) => void;
-
-    turn_change: (nextUnitIdx: number) => void;
-    map_shrink: (shrinkLevel: number, deadUnits: Array<number>, fov :Array<string>) => void;
-    game_over: (winner: string) => void;
 
     forfeit_game: () => void;
 };
 
-export type MenuEvent = {
+export type HTTPEvent = {
     login_requested: (username: string) => void;
     login: (username: string, token: string) => void;
     connected: () => void;
@@ -65,8 +71,5 @@ export type MenuEvent = {
     leave_room_requested: () => void;
     leave_room: () => void;
 
-    delete_room: () => void;
-
     start_game_requested: () => void;
-    game_start: (player1: string, player2: string, fov: Array<string>) => void;
 };

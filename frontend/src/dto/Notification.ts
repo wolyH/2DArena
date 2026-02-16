@@ -1,5 +1,5 @@
-export type UnitCoordinates = {idx: number, q: number, r: number};
-export type HexCoordinates = {q: number; r: number;}
+type UnitCoords = {idx: number, q: number, r: number};
+type HexCoords = {q: number; r: number;}
 
 export type Notification = {type: "PLAYER_JOIN", data: PlayerJoinData} |
     {type: "ROOM_DELETE", data: RoomDeleteData} |
@@ -13,13 +13,19 @@ export type Notification = {type: "PLAYER_JOIN", data: PlayerJoinData} |
     {type: "MAP_SHRINK", data: MapShrinkData} |
     {type: "GAME_OVER", data: GameOverData};
 
-export interface PlayerJoinData {username: string, roomId: string}
+export interface PlayerJoinData {
+    username: string, 
+    roomId: string
+}
 
-export interface RoomDeleteData {roomId: string}
+export interface RoomDeleteData {
+    roomId: string
+}
 
-export interface PlayerLeaveData {username: string, roomId: string}
-
-export interface RoomDeleteData {roomId: string}
+export interface PlayerLeaveData {
+    username: string, 
+    roomId: string
+}
 
 export interface GameStartData {
     player1: string, 
@@ -29,26 +35,29 @@ export interface GameStartData {
 }
 export interface UnitAttackData {
     attackerIdx: number, 
-    targetCoords: HexCoordinates, 
+    targetCoords: HexCoords, 
     fov: Array<string>, 
     roomId: string
 }
 
 export interface AllyMoveData {
     unitIdx: number, 
-    path: Array<HexCoordinates>, 
+    path: Array<HexCoords>, 
     pathFov: Array<Array<string>>, 
-    visibleUnitsAlongPath: Array<Array<UnitCoordinates>>, 
+    visibleUnitsAlongPath: Array<Array<UnitCoords>>, 
     roomId: string
 }
 
 export interface EnemyMoveData {
     unitIdx: number,
-    path: Array<HexCoordinates>, 
+    path: Array<HexCoords>, 
     roomId: string
 
 }
-export interface TurnChangeData {nextUnitIdx: number, roomId: number}
+export interface TurnChangeData {
+    nextUnitIdx: number, 
+    roomId: string
+}
 
 export interface MapShrinkData {
     shrinkLevel: number, 
@@ -57,4 +66,7 @@ export interface MapShrinkData {
     roomId: string
 }
 
-export interface GameOverData {winner: string, roomId: string}
+export interface GameOverData {
+    winner: string, 
+    roomId: string
+}

@@ -76,9 +76,7 @@ export class InputEventHandler {
         });
     }
 
-    private startUnitAction(hex: Hex): void {
-        const activeUnit = this.#unitManager.getActiveUnit();  
-
+    private startUnitAction(hex: Hex): void { 
         if (!this.#unitManager.canActiveUnitActs()) {
             return;
         }
@@ -88,7 +86,7 @@ export class InputEventHandler {
             return;
         }
 
-        if (this.#unitManager.canAttack(activeUnit, hex)) {
+        if (this.#unitManager.canAttack(this.#unitManager.getActiveUnit(), hex)) {
             this.#eventBus.emit("unit_attack_requested", hex);
         }
     }

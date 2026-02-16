@@ -1,44 +1,32 @@
-import type { FovManager } from "../../FovManager";
-import type { MapManager } from "../../MapManager";
 import type { GameInputHandler } from "../../input/GameInputHandler";
 import type { MenuInputHandler } from "../../input/MenuInputHandler";
 import type { NetworkManager } from "../../NetworkManager";
 import type { RoomState } from "../../RoomState";
-import type { UnitManager } from "../../UnitManager";
 import type { AllEvents } from "../events";
 import type { EventBus } from "../../utils/EvenBus";
 import type { UiManager } from "../../UiManager";
 
-export class MenuEventHandler {
+export class HttpEventHandler {
     readonly #eventBus: EventBus<AllEvents>;
     readonly #uiManager: UiManager;
-    readonly #mapManager: MapManager;
     readonly #networkManager: NetworkManager;
     readonly #gameInputHandler: GameInputHandler;
     readonly #menuInputHandler: MenuInputHandler;
-    readonly #fovManager: FovManager;
-    readonly #unitManager: UnitManager;
     readonly #roomState: RoomState;
 
     constructor(
         eventBus: EventBus<AllEvents>,
         uiManager: UiManager,
-        mapManager: MapManager,
         networkManager: NetworkManager,
         gameInputHandler: GameInputHandler,
         menuInputHandler: MenuInputHandler,
-        fovManager: FovManager,
-        unitManager: UnitManager,
         roomState: RoomState,
     ) {
         this.#eventBus = eventBus;
         this.#uiManager = uiManager;
-        this.#mapManager = mapManager;
         this.#networkManager = networkManager;
         this.#gameInputHandler = gameInputHandler;
         this.#menuInputHandler = menuInputHandler;
-        this.#fovManager = fovManager;
-        this.#unitManager = unitManager;
         this.#roomState = roomState;
     }
 
@@ -106,16 +94,6 @@ export class MenuEventHandler {
 
         this.#eventBus.on("start_game_requested", () => {
             this.#networkManager.startGame(this.#roomState.room.roomId);
-        });
-
-        this.#eventBus.on("game_start", (player1, player2, fov) => {
-            this.#mapManager.fill();
-            this.#gameInputHandler.clearHoverState();
-            this.#fovManager.setFov(fov);
-            this.#unitManager.spawnUnits(player1, player2);
-            this.#menuInputHandler.removeEventListeners();
-            this.#gameInputHandler.setupEventListeners();
-            this.#uiManager.showGame();
         });
     }
 }
