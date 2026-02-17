@@ -40,6 +40,7 @@ export type InputEvent = {
 export type RenderingEvent = {
     fov_changed: () => void;
     map_size_changed: () => void;
+    camera_changed: () => void;
 }
 
 export type GameActionEvent = {

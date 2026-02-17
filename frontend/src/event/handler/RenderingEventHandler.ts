@@ -23,5 +23,9 @@ export class RenderingEventHandler {
             this.#gameRenderer.resize();
             this.#gameRenderer.invalidateMapCache();
         });
+
+        this.#eventBus.on("camera_changed", () => {
+            this.#gameRenderer.invalidateMapCache();
+        });
     }
 }

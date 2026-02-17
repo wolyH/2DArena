@@ -15,7 +15,7 @@ export class UnitFactory {
         y: number, 
         username: string, 
         idx: number, 
-        speed: number = 160
+        speed: number = 100
     ): Unit {
         return this.createUnit(hex, x, y, speed, username, idx, "black",);
     }
@@ -26,7 +26,7 @@ export class UnitFactory {
         y: number | undefined, 
         username: string, 
         idx: number, 
-        speed: number = 160
+        speed: number = 100
     ): Unit {
         return this.createUnit(hex, x, y, speed, username, idx, "black");
     }

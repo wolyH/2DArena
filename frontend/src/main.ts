@@ -119,7 +119,7 @@ const menuInputHandler = new MenuInputHandler(
 );
 
 const cameraManager = new CameraManager(
-    gameRenderer, 
+    eventBus, 
     layoutManager
 );
 

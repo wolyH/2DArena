@@ -147,15 +147,14 @@ public class FovManager {
         if(distance > visibilityRange) {
             return false;
         }
-        boolean isVisible = false;
 
         for (int i = 0 ; i <= distance ; i++) {
             CuberLerpResult result = cubeLerp(h1, h2, 1.0 / visibilityRange * i);
             Hex hex = mapManager.getHex(Hex.key((int)Math.round(result.q()), (int)Math.round(result.r())));
-            if(hex != null && !hex.isObstacle()) {
-                isVisible = true;
+            if(hex != null && hex.isObstacle()) {
+                return false;
             }
         }
-        return isVisible;
+        return true;
     }
 }

@@ -5,10 +5,10 @@ export type UnitAction = "Idle" | "Moving" | "Striking" | "Dying";
 type Direction = 1 | -1;
 
 export class Unit {
-    //position of the hex most adjacent to the unit on the grid
+    //position of the hex most adjacent to the unit
     #hex: Hex | undefined
 
-    //position of the unit on the screen
+    //world position
     #x: number | undefined;
     #y: number | undefined;
 
@@ -92,6 +92,7 @@ export class Unit {
         this.#x = x;
         this.#y = y;
     }
+
     clearWorldPos() {
         this.#x = undefined;
         this.#y = undefined;

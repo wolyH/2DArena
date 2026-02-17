@@ -7,11 +7,11 @@ import { Hex } from "../model/Hex";
 import type { UiManager } from "../UiManager";
 import type { LayoutManager } from "../LayoutManager";
 
-export class GameInputHandler  extends InputHandler {
+export class GameInputHandler extends InputHandler {
     readonly #layoutManager: LayoutManager;
     readonly #mapManager: MapManager;
 
-    #lastHoveredHex?: string;
+    #lastHoveredHex: string | undefined = undefined;
 
     constructor(
         mapManager: MapManager,

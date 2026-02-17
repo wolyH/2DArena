@@ -1,9 +1,10 @@
 
+import type { AllEvents } from "./event/events";
 import type { LayoutManager } from "./LayoutManager";
-import type { GameRenderer } from "./rendering/GameRenderer";
+import type { EventBus } from "./utils/EvenBus";
 
 export class CameraManager {
-    readonly #gameRenderer: GameRenderer;
+    readonly #eventBus: EventBus<AllEvents>
     readonly #layoutManager: LayoutManager;
 
     readonly #camera = {up: false, down: false, left: false, right: false};
@@ -11,10 +12,10 @@ export class CameraManager {
     static readonly #CAMERA_SPEED = 1000;
     
     constructor(
-        gameRenderer: GameRenderer,
+        eventBus: EventBus<AllEvents>,
         layoutManager: LayoutManager
     ) {
-        this.#gameRenderer = gameRenderer;
+        this.#eventBus = eventBus;
         this.#layoutManager = layoutManager;
     }
 
@@ -47,7 +48,7 @@ export class CameraManager {
         const offsetY = (xorY / length) * cameraSpeed;
 
         if (this.#layoutManager.updateCameraOffset(offsetX, offsetY)) {
-            this.#gameRenderer.invalidateMapCache();
+            this.#eventBus.emit("camera_changed");
         }
     }
 

@@ -91,6 +91,11 @@ export class NotificationEventHandler {
             attacker.strike();
             target.die();
             this.#fovManager.setFov(data.fov);
+
+            if(!this.#fovManager.isVisible(attacker.hex)) {
+                attacker.clearWorldPos();
+                attacker.setHex(undefined);
+            }
         });
 
         this.#eventBus.on("ALLY_MOVE", (data) => { 
