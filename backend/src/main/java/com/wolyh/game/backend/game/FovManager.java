@@ -90,12 +90,16 @@ public class FovManager {
 
     public List<List<UnitCoordinates>> getVisibleUnitsAlongPath(List<Set<String>> pathPov) {
         Map<String, UnitCoordinates> enemyUnitsByHex = new HashMap<>();
-
+        
         unitManager.forEachAliveUnit(unit -> {
             if (!unitManager.isActivePlayer(unit) && unit.getHex() != null) {
                 Hex unitHex = unit.getHex();
                 String key = Hex.key(unitHex.getQ(), unitHex.getR());
-                enemyUnitsByHex.put(key, new UnitCoordinates(unit.idx, unitHex.getQ(), unitHex.getR()));
+                enemyUnitsByHex.put(key, new UnitCoordinates(
+                    unit.idx, 
+                    unitHex.getQ(), 
+                    unitHex.getR()
+                ));
             }
         });
 
@@ -118,15 +122,15 @@ public class FovManager {
     private void updateVisibilityMap() {
         this.visibilityMap.clear();
 
-        for (Map.Entry<String, Hex> entry1 : mapManager.getMap().entrySet()) {
+        mapManager.forEachHex(hex -> {
             ArrayList<String> fov = new ArrayList<>();
-            for (Map.Entry<String, Hex> entry2 : mapManager.getMap().entrySet()) {
-                if(rayCast(entry1.getValue(), entry2.getValue(), Unit.VISIBILITY_RANGE)) {
-                    fov.add(entry2.getKey());
+            for(Hex candidate : mapManager.getHexesInRange(hex, Unit.VISIBILITY_RANGE)) {
+                if(rayCast(hex, candidate, Unit.VISIBILITY_RANGE)) {
+                    fov.add(candidate.getKey());
                 }
             }
-            visibilityMap.put(entry1.getKey(), fov);
-        }
+            visibilityMap.put(hex.getKey(), fov);
+        });
     }
 
     private double lerp(double a, double b, double t) {

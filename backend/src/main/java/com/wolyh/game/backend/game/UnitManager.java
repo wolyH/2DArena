@@ -1,17 +1,24 @@
 package com.wolyh.game.backend.game;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
-
+import java.util.Map;
+import java.util.Random;
 import java.util.function.Consumer;
 
 import com.wolyh.game.backend.model.Hex;
 import com.wolyh.game.backend.model.Unit;
+import com.wolyh.game.backend.model.UnitCoordinates;
 
 public class UnitManager {
     private final MapManager mapManager;
     private final PlayerManager playerManager;
-    private final int nb_units = 3;
+
+    private final Random random = new Random();
+
+    private final int nb_units_per_player = 3;
+    private final int inital_min_dist_between_units = 2;
 
     private Unit[] units;
     private int ActiveUnitIdx = 0;
@@ -22,7 +29,7 @@ public class UnitManager {
     ) {
         this.mapManager = mapManager;
         this.playerManager = playerManager;
-        this.units = new Unit[nb_units];
+        this.units = new Unit[2* nb_units_per_player];
     }
 
     public Hex getHex(int ActiveUnitIdx) {
@@ -72,16 +79,50 @@ public class UnitManager {
     }
 
     public void spawnUnits() {
-        Hex hex1 = mapManager.getHex(Hex.key(-(mapManager.n-1), 0));
-        Hex hex2 = mapManager.getHex(Hex.key(mapManager.n-1, 0));
-        Hex hex3 = mapManager.getHex(Hex.key(mapManager.n-2, 0));
+        List<Hex> possibleSpawns = mapManager.generateSpawns(inital_min_dist_between_units);
 
-        Unit unit1 = new Unit(hex1, playerManager.getPlayer1(), 0);
-        Unit unit2 = new Unit(hex2, playerManager.getPlayer2(), 1);
-        Unit unit3 = new Unit(hex3, playerManager.getPlayer2(), 2);
-        units[0] = unit1;
-        units[1] = unit2;
-        units[2] = unit3;
+        if(possibleSpawns.size() < 2 * nb_units_per_player) {
+            throw new IllegalArgumentException(
+                "A min spawn distance of "  + 
+                inital_min_dist_between_units + 
+                " bewteen unit is too large for the map size"
+            );
+        }
+
+        for (int i = 0 ; i < units.length ; i++) {
+            Hex hex = possibleSpawns.remove(random.nextInt(possibleSpawns.size()));
+            if(i % 2 == 0) {
+                units[i] = new Unit(hex, playerManager.getPlayer1(), i);
+            }
+            else {
+                units[i] = new Unit(hex, playerManager.getPlayer2(), i);
+            }
+        }
+    }
+
+    public Map<String, List<UnitCoordinates>> getUnitLocations() {
+        Map<String, List<UnitCoordinates>> unitLocationsPerPlayer = new HashMap<>();
+
+        unitLocationsPerPlayer.put(playerManager.getPlayer1(), new ArrayList<>());
+        unitLocationsPerPlayer.put(playerManager.getPlayer2(), new ArrayList<>());
+
+        for (int i = 0 ; i < units.length ; i++) {
+            if(units[i].isDead()) {
+                continue;
+            }
+
+            unitLocationsPerPlayer.get(units[i].getPlayer()).add(new UnitCoordinates(
+                i, 
+                units[i].getHex().getQ(), 
+                units[i].getHex().getR()
+            ));
+        }
+        
+        return unitLocationsPerPlayer;
+    }
+
+    public int getNumberOfUnits() {
+        return 2 * nb_units_per_player;
     }
 
     public record EndConditionResult(boolean player1Won, boolean player2Won) {}

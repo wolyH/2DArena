@@ -36,7 +36,6 @@ export class MovementState {
         this.#pathFov.shift();
     }
 
-
     isMoving(): boolean {
         return this.#path.length > 0;
     }

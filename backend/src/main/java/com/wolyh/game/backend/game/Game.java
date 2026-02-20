@@ -10,7 +10,7 @@ import com.wolyh.game.backend.model.Hex;
 import com.wolyh.game.backend.model.HexCoordinates;
 import com.wolyh.game.backend.model.UnitCoordinates;
 
-public class GameContext {
+public class Game {
     private final MapManager mapManager;
     private final UnitManager unitManager;
     private final FovManager fovManager;
@@ -20,7 +20,7 @@ public class GameContext {
 
     private boolean isGameOver = false;
 
-    public GameContext(String player1, String player2) {
+    public Game(String player1, String player2) {
         this.mapManager = new MapManager();
         this.playerManager = new PlayerManager(player1, player2);
         this.turnManager = new TurnManager();
@@ -34,6 +34,14 @@ public class GameContext {
 
     public Set<String> getFov(String username) {
         return fovManager.getFov(username);
+    }
+
+    public Map<String, List<UnitCoordinates>> getUnitLocations() {
+        return unitManager.getUnitLocations();
+    }
+
+    public int getNumberOfUnits() {
+        return unitManager.getNumberOfUnits();
     }
 
     public String getActivePlayer() {

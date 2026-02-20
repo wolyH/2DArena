@@ -114,10 +114,20 @@ public class RoomService {
             
             AddGameResult result = gameService.addGame(roomId, creator, guest);
 
-            GameStart data = new GameStart(creator, guest, result.player2Fov(), roomId);
+            GameStart data = new GameStart(
+                result.player2Fov(),
+                result.unitSpawnsPerPlayer().get(guest),
+                result.nb_units(),
+                roomId
+            );
             
             return new RoomService.StartGameResult(
-                new RoomResponses.StartGame(creator, guest, result.player1Fov(), roomId),
+                new RoomResponses.StartGame(
+                    result.player1Fov(), 
+                    result.unitSpawnsPerPlayer().get(creator),
+                    result.nb_units(),
+                    roomId
+                ),
                 new Notification<RoomEvent>(Type.GAME_START, data),
                 guest
             );

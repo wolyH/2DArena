@@ -28,19 +28,18 @@ export class MovementManager {
         this.#mapManager = mapManager;
     }
 
-    updateAllUnits(delta: number): void {
-        this.#unitManager.forEachAliveUnit(unit => {
-            if (unit.is("Moving") && !this.#movementState.isMoving()) {
-                unit.idle();
-                if(!unit.isVisible()) {
-                    unit.clearWorldPos();
-                }
+    updateActiveUnit(delta: number): void {
+        const activeUnit = this.#unitManager.getActiveUnit()
+        
+        if (activeUnit.is("Moving") && !this.#movementState.isMoving()) {
+            activeUnit.idle();
+            if(!activeUnit.isVisible()) {
+                activeUnit.clearWorldPos();
             }
-            if(unit.is("Moving") && this.#movementState.isMoving()) {
-                this.moveUnitTowardGoal(unit, delta);
-            }
-            unit.update();
-        });
+        }
+        if(activeUnit.is("Moving") && this.#movementState.isMoving()) {
+            this.moveUnitTowardGoal(activeUnit, delta);
+        }
     }
         
     private moveUnitTowardGoal(unit: Unit, delta: number): void {
@@ -80,10 +79,10 @@ export class MovementManager {
         }
 
         if(!isGoalVisible) {
-            this.clearUnitHex(unit, prevAdjacentHex, newAdjacentHex);
+            this.clearUnitHexIfNeeded(unit, prevAdjacentHex, newAdjacentHex);
         }
         else {
-            this.updateUnitHex(unit, prevAdjacentHex, newAdjacentHex);
+            this.updateUnitHexIfNeeded(unit, prevAdjacentHex, newAdjacentHex);
         }
 
         if (isTooClose) {
@@ -91,12 +90,12 @@ export class MovementManager {
         }
     }
 
-    private updateUnitHex(unit: Unit, prevAdjacentHex: Hex, newAdjacentHex: Hex): void {
+    private updateUnitHexIfNeeded(unit: Unit, prevAdjacentHex: Hex, newAdjacentHex: Hex): void {
         if (prevAdjacentHex.hashCode !== newAdjacentHex.hashCode) {
             const {currentFov, currentLocation} = this.#movementState.getCurrentFovAndLocation();
             this.#movementState.shiftFovAndLocation();
 
-            if(currentFov && currentLocation) {
+            if(currentFov !== undefined && currentLocation !== undefined) {
                 this.#fovManager.setFov(currentFov);
                 this.#unitManager.setEnemyLocation(currentLocation);
             }
@@ -104,7 +103,7 @@ export class MovementManager {
         }
     }
 
-    private clearUnitHex(unit: Unit, prevAdjacentHex: Hex, newAdjacentHex: Hex): void {
+    private clearUnitHexIfNeeded(unit: Unit, prevAdjacentHex: Hex, newAdjacentHex: Hex): void {
         if (prevAdjacentHex.hashCode !== newAdjacentHex.hashCode) {
             this.#movementState.shiftFovAndLocation();
             unit.setHex(undefined);

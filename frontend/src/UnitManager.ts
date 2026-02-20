@@ -62,32 +62,35 @@ export class UnitManager {
         }
     }
 
-    spawnUnits(player1: string, player2: string): void {
-        const hex1 = this.#mapManager.getHex(Hex.hashCode(-(this.#mapManager.n-1), 0))!;
-        const hex2 = this.#mapManager.getHex(Hex.hashCode(this.#mapManager.n-1, 0))!;
-        const hex3 = this.#mapManager.getHex(Hex.hashCode(this.#mapManager.n-2, 0))!;
-
-        const [x1, y1] = this.#layoutManager.hexToWorld(hex1);
-        const [x2, y2] = this.#layoutManager.hexToWorld(hex2);
-        const [x3, y3] = this.#layoutManager.hexToWorld(hex3);
-
-        if(player1 === this.#roomState.username && player2 === this.#roomState.opponent) {
-            const unit1 = this.#factory.createAlly(hex1, x1, y1, player1, 0);
-            const unit2 = this.#factory.createEnemy(undefined, undefined, undefined, player2, 1);
-            const unit3 = this.#factory.createEnemy(undefined, undefined, undefined, player2, 2);
-            this.setUnits([unit1, unit2, unit3]);
-        }
-        else if (player1 === this.#roomState.opponent && player2 === this.#roomState.username) {
-            const unit1 = this.#factory.createEnemy(undefined, undefined, undefined, player1, 0);
-            const unit2 = this.#factory.createAlly(hex2, x2, y2, player2, 1);
-            const unit3 = this.#factory.createAlly(hex3, x3, y3, player2, 2);
-             this.setUnits([unit1, unit2, unit3]);
-        }
-    }
-
-    private setUnits(units: Array<Unit>) {
-        this.#units = units;
+    spawnUnits(unitSpawns: Array<{idx: number, q: number, r: number}>, nb_units: number): void {
         this.#activeUnitIdx = 0;
+        this.#units = [];
+
+        const allyIdxs = new Map(unitSpawns.map(u => [u.idx, u]));
+        const username = this.#roomState.username;
+        const opponent = this.#roomState.room.opponent;
+        
+        if (opponent === undefined) {
+            throw new Error("Cannot spawn units: opponent is undefined");
+        }
+
+        for (let i = 0 ; i < nb_units ; i++) {
+            const unitCoords = allyIdxs.get(i);
+            if(unitCoords === undefined) {
+                this.#units.push(this.#factory.createEnemy(undefined, undefined, undefined, opponent, i))
+                continue;
+            }
+
+            const hex = this.#mapManager.getHex(Hex.hashCode(unitCoords.q, unitCoords.r));
+            if(hex === undefined || !hex.isTraversable()) {
+                 throw new Error(
+                    `Cannot spawn unit ${unitCoords.idx} at (${unitCoords.q}, ${unitCoords.r}): hex is invalid or not traversable`
+                );
+            }
+
+            const [x, y] = this.#layoutManager.hexToWorld(hex);
+            this.#units.push(this.#factory.createAlly(hex, x, y, username, unitCoords.idx));
+        }
     }
 
     public forEachAliveUnit(consumer: (unit: Unit) => void) {
@@ -103,8 +106,7 @@ export class UnitManager {
             const hex = enemyLocation.get(unit.idx);
             if(!this.isUnitEnemy(unit)) {
                 continue;
-            }
-            
+            }  
             if(hex === undefined && unit.hasHex()) {
                 unit.setHex(undefined)
                 unit.clearWorldPos();
@@ -122,6 +124,18 @@ export class UnitManager {
                 const [x, y] = this.#layoutManager.hexToWorld(hex);
                 unit.setWorldPos(x, y);
                 unit.setHex(hex);
+            }
+        }
+    }
+
+    refreshEnemyLocation() {
+        for(const unit of this.#units) {
+            if(!this.isUnitEnemy(unit)) {
+                continue;
+            }
+            if(unit.isVisible() && !this.#fovManager.isVisible(unit.hex)) {
+                unit.clearWorldPos();
+                unit.setHex(undefined);
             }
         }
     }

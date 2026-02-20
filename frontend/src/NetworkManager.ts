@@ -149,7 +149,7 @@ export class NetworkManager {
     async startGame(roomId: string) {
         const data = await this.request<RoomResponses.StartGame>(`room/start/${roomId}`, "POST");
 
-        if (data && data.roomId && data.player1 && data.player2 && data.fov) {
+        if (data && data.roomId && data.fov && data.unitSpawns && data.nb_units) {
             this.#eventBus.emit("GAME_START", data);
         }
     }

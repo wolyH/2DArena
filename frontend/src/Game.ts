@@ -110,6 +110,9 @@ export class Game {
 
     private updateGame(delta: number): void {
         this.#cameraManager.updateCamera(delta);
-        this.#movementManager.updateAllUnits(delta);
+        this.#movementManager.updateActiveUnit(delta);
+        this.#unitManager.forEachAliveUnit(unit => {
+            unit.update();
+        });
     }
 }

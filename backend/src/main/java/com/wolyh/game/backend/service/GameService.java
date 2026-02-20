@@ -20,7 +20,7 @@ import com.wolyh.game.backend.dto.Notification.GameOver;
 import com.wolyh.game.backend.dto.Notification.MapShrink;
 import com.wolyh.game.backend.dto.Notification.TurnChange;
 import com.wolyh.game.backend.dto.Notification.UnitAttack;
-import com.wolyh.game.backend.game.GameContext;
+import com.wolyh.game.backend.game.Game;
 import com.wolyh.game.backend.game.Result.AddGameResult;
 import com.wolyh.game.backend.game.Result.ForfeitResult;
 import com.wolyh.game.backend.game.Result.ShrinkMapResult;
@@ -33,20 +33,22 @@ import com.wolyh.game.backend.model.UnitCoordinates;
 @Service
 public class GameService {
 
-    private final Map<String, GameContext> games = new ConcurrentHashMap<>();
+    private final Map<String, Game> games = new ConcurrentHashMap<>();
     private final Map<String, Lock> gameLocks = new ConcurrentHashMap<>();
 
     public AddGameResult addGame(String roomId, String player1, String player2) {
         games.computeIfAbsent(roomId, id -> {
             gameLocks.put(id, new ReentrantLock());
-            return new GameContext(player1, player2);
+            return new Game(player1, player2);
         });
 
-        GameContext game = games.get(roomId);
+        Game game = games.get(roomId);
     
         return new AddGameResult(
             game.getFov(player1),
-            game.getFov(player2)
+            game.getFov(player2),
+            game.getUnitLocations(),
+            game.getNumberOfUnits()
         );
     }
 
@@ -74,7 +76,7 @@ public class GameService {
         lock.lock();
 
         try {
-            GameContext game = games.get(roomId);
+            Game game = games.get(roomId);
 
             if (game.isGameOver()) {
                 return null;
@@ -106,7 +108,7 @@ public class GameService {
         lock.lock();
 
         try {
-            GameContext game = games.get(roomId);
+            Game game = games.get(roomId);
 
             if (game.isGameOver()) { 
                 return null;  
@@ -145,7 +147,7 @@ public class GameService {
         lock.lock();
 
         try {
-            GameContext game = games.get(roomId);
+            Game game = games.get(roomId);
 
             if (game.isGameOver()) { 
                 return null;  
@@ -171,7 +173,7 @@ public class GameService {
     }
 
     public UnitActionResult handleMove(
-        GameContext game, 
+        Game game, 
         String roomId,
         int unitIdx, 
         HexCoordinates goalCoords
@@ -214,7 +216,7 @@ public class GameService {
     }
 
     public UnitActionResult handleAttack(
-        GameContext game, 
+        Game game, 
         String roomId, 
         int attackerIdx, 
         HexCoordinates targetCoords
@@ -248,7 +250,7 @@ public class GameService {
     }
 
     private boolean endTurn(
-        GameContext game, 
+        Game game, 
         String roomId, 
         Map<String, List<Notification<GameEvent>>> notifications
     ) {

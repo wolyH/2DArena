@@ -1,6 +1,3 @@
-type UnitCoords = {idx: number, q: number, r: number};
-type HexCoords = {q: number; r: number;}
-
 export type Notification = {type: "PLAYER_JOIN", data: PlayerJoinData} |
     {type: "ROOM_DELETE", data: RoomDeleteData} |
     {type: "PLAYER_LEAVE", data: PlayerLeaveData} |
@@ -28,29 +25,30 @@ export interface PlayerLeaveData {
 }
 
 export interface GameStartData {
-    player1: string, 
-    player2: string, 
-    fov: Array<string>, 
+    fov: Array<string>,
+    unitSpawns: Array<{idx: number, q: number, r: number}>,
+    nb_units: number,
     roomId: string
 }
+
 export interface UnitAttackData {
     attackerIdx: number, 
-    targetCoords: HexCoords, 
+    targetCoords: {q: number; r: number;}, 
     fov: Array<string>, 
     roomId: string
 }
 
 export interface AllyMoveData {
     unitIdx: number, 
-    path: Array<HexCoords>, 
+    path: Array<{q: number; r: number;}>, 
     pathFov: Array<Array<string>>, 
-    visibleUnitsAlongPath: Array<Array<UnitCoords>>, 
+    visibleUnitsAlongPath: Array<Array<{idx: number, q: number, r: number}>>, 
     roomId: string
 }
 
 export interface EnemyMoveData {
     unitIdx: number,
-    path: Array<HexCoords>, 
+    path: Array<{q: number; r: number;}>, 
     roomId: string
 
 }

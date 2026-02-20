@@ -54,9 +54,9 @@ export class NotificationManager {
             case "ROOM_DELETE":
                 return update;
             case "GAME_START":
-                return this.isString(data.player1) && 
-                    this.isString(data.player2) && 
-                    this.isStringArray(data.fov) 
+                return this.isStringArray(data.fov) &&
+                    this.isUnitCoordsArray(data.unitSpawns) &&
+                    this.isNumber(data.nb_units)
                 ? update : undefined;
             case "ALLY_MOVE":
                 return this.isNumber(data.unitIdx) &&
@@ -69,7 +69,7 @@ export class NotificationManager {
                     this.isHexCoordsArray(data.path)
                 ? update : undefined;
             case "UNIT_ATTACK":
-                return this.isHexCoord(data.targetCoords) &&
+                return this.isHexCoords(data.targetCoords) &&
                     this.isNumber(data.attackerIdx) &&
                     this.isStringArray(data.fov)
                 ? update : undefined;
@@ -103,8 +103,18 @@ export class NotificationManager {
         return typeof val === "number";
     }
 
-    private isHexCoord(val: any): boolean {
+    private isHexCoords(val: any): boolean {
         return val && typeof val.q === "number" && typeof val.r === "number";
+    }
+    
+    private isUnitCoordsArray(arr: any): boolean {
+        return Array.isArray(arr) && 
+            arr.every(
+                x => x && 
+                typeof x.q === "number" && 
+                typeof x.r === "number" && 
+                typeof x.idx === "number"
+            );
     }
 
     private isNumberArray(arr: any): boolean {

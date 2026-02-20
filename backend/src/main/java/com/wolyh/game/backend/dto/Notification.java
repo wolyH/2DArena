@@ -12,9 +12,9 @@ public record Notification <T> (Type type, T data) {
     public static interface GameEvent {}
 
     public static record GameStart(
-        String player1, 
-        String player2, 
-        Set<String> fov, 
+        Set<String> fov,
+        List<UnitCoordinates> unitSpawns,
+        int nb_units,
         String roomId
     ) implements RoomEvent {}
 

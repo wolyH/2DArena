@@ -140,6 +140,7 @@ export class ActionValidator {
         const startHex = this.#mapManager.getHex(
             Hex.hashCode(pathCoords[0].q, pathCoords[0].r)
         );
+        
         if (!startHex) {
             throw new Error(
                 `Path start hex at (${pathCoords[0].q}, ${pathCoords[0].r}) not found`

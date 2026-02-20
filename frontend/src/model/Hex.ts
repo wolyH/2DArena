@@ -6,7 +6,9 @@ export class Hex {
     readonly s: number;
 
     readonly strokeColor: string;
+
     readonly isObstacle: boolean;
+
     unit: Unit | undefined;
 
     readonly hashCode: string;
@@ -24,7 +26,7 @@ export class Hex {
         this.r = r;
         this.s = s;
 
-        this.hashCode =`${q}_${r}`;
+        this.hashCode = Hex.hashCode(q, r);
 
         this.isObstacle = isObstacle;
 

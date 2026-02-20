@@ -9,9 +9,9 @@ export namespace RoomResponses {
     }
 
     export interface StartGame {
-        player1: string;
-        player2: string;
-        roomId: string;
         fov: Array<string>;
+        unitSpawns: Array<{idx: number, q: number, r: number}>;
+        nb_units: number;
+        roomId: string;
     }
 }

@@ -50,7 +50,7 @@ export class NotificationEventHandler {
         this.#pathPreviewManager = pathPreviewManager;
         this.#movementState = movementState;
         this.#unitManager = unitManager;
-        this.#fovManager  = fovManager;
+        this.#fovManager = fovManager;
         this.#layoutManager = layoutManager;
         this.#actionValidator = actionValidator;
         this.#mapManager = mapManager;
@@ -91,11 +91,7 @@ export class NotificationEventHandler {
             attacker.strike();
             target.die();
             this.#fovManager.setFov(data.fov);
-
-            if(!this.#fovManager.isVisible(attacker.hex)) {
-                attacker.clearWorldPos();
-                attacker.setHex(undefined);
-            }
+            this.#unitManager.refreshEnemyLocation();
         });
 
         this.#eventBus.on("ALLY_MOVE", (data) => { 
@@ -152,7 +148,7 @@ export class NotificationEventHandler {
             this.#mapManager.fill();
             this.#gameInputHandler.clearHoverState();
             this.#fovManager.setFov(data.fov);
-            this.#unitManager.spawnUnits(data.player1, data.player2);
+            this.#unitManager.spawnUnits(data.unitSpawns, data.nb_units);
             this.#menuInputHandler.removeEventListeners();
             this.#gameInputHandler.setupEventListeners();
             this.#uiManager.showGame();
